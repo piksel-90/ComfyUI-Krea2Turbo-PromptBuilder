@@ -8,6 +8,7 @@ import tempfile
 import folder_paths
 
 from .krea_prompt_builder.images import save_one_image
+from .krea_prompt_builder.contract import evaluate_text_contract
 from .krea_prompt_builder.memory import enforce_headroom
 from .krea_prompt_builder.models import catalog, select_gguf, resolve_projector
 from .krea_prompt_builder.prompting import build_instruction, MODES
@@ -57,11 +58,17 @@ class KreaPromptBuilder:
                 "after_purge": (ANY, {"tooltip": "Connect output of RAM/VRAM Purge to enforce execution ordering. If it has no output, sequencing requires a relay node."}),
                 "model_path_override": ("STRING", {"default": "", "tooltip": "Optional absolute GGUF file path. Leave empty to use model dropdown; no copies needed."}),
                 "mmproj_path_override": ("STRING", {"default": "", "tooltip": "Optional absolute mmproj GGUF path. Leave empty for auto-detection next to model."}),
+                "scene_contract": ("STRING", {"default": "", "multiline": True,
+                                  "tooltip": "Explicit requirements for the scene, not evidence of what the image contains."}),
+                "required_exact_phrases": ("STRING", {"default": "", "multiline": True,
+                                           "tooltip": "One exact case-insensitive phrase per line that MUST occur in generated prompt."}),
+                "forbidden_exact_phrases": ("STRING", {"default": "", "multiline": True,
+                                            "tooltip": "One exact case-insensitive phrase per line that must NOT occur in prompt."}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "IMAGE")
-    RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "IMAGE", "STRING", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image", "contract_report_pl", "contract_ok", "gpu_offload_info")
     FUNCTION = "build"
     CATEGORY = "Krea/Prompt Builder"
     DESCRIPTION = "One IMAGE -> a Krea 2 Turbo prompt via local VLM GGUF in disposable llama.cpp process."
@@ -72,12 +79,13 @@ class KreaPromptBuilder:
         context_size, max_tokens, batch_size, timeout_seconds,
         commit_headroom_gib, after_purge=None, model_path_override="", mmproj_path_override="",
         execution_device="hybrid", output_mode="plain_sections", reasoning="off", save_diagnostics=False,
+        scene_contract="", required_exact_phrases="", forbidden_exact_phrases="",
     ):
         _, _, known_paths = catalog(MODEL_ROOT, folder_paths)
         model = select_gguf(model_gguf, known_paths, model_path_override)
         mmproj = resolve_projector(mmproj_gguf, model, known_paths, mmproj_path_override)
         executable = find_executable(llama_cli_path)
-        instruction = build_instruction(mode, user_goal, source_prompt, output_mode)
+        instruction = build_instruction(mode, user_goal, source_prompt, output_mode, scene_contract)
         if save_diagnostics:
             output_dir = (Path(folder_paths.get_output_directory()) if hasattr(folder_paths, "get_output_directory")
                           else MODEL_ROOT.parent / "output")
@@ -98,8 +106,13 @@ class KreaPromptBuilder:
                 reasoning=reasoning, diagnostics_dir=diagnostics_dir,
             )
         plan = f"KEEP:\n{result['keep']}\n\nIMPROVE:\n{result['improve']}"
-        return (result["prompt_en_us"], result["analysis_en"], plan, image)
+        status = evaluate_text_contract(result["prompt_en_us"], required_exact_phrases, forbidden_exact_phrases)
+        prompt = result["prompt_en_us"] if status.ok else ""  # fail closed: do not forward a known-violating prompt
+        if not status.ok:
+            LOG.warning("Prompt blocked by explicit text contract; consult contract_report_pl")
+        return (prompt, result["analysis_en"], plan, image, status.report_pl, status.ok,
+                result.get("_gpu_offload_info", "GPU offload not reported"))
 
 
 NODE_CLASS_MAPPINGS = {"Krea2TurboPromptBuilderV01": KreaPromptBuilder}
-NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.2"}
+NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.3"}

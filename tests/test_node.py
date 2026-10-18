@@ -51,6 +51,20 @@ class NodeTests(unittest.TestCase):
                 self.assertIn("KEEP:", result[2])
                 self.assertIs(result[3], img)
                 self.assertEqual(runner.call_count, 1)
+                self.assertEqual(len(result), 7)
+                self.assertTrue(result[5])
+                self.assertIn("nie ma niezależnego", result[4])
+                with patch.object(mod, "run_once", return_value={
+                    "analysis_en": "A scene", "keep": "original room", "improve": "soft light",
+                    "prompt_en_us": "A child in a rice field holding a laptop",
+                }):
+                    blocked = node.build(img, "llama_cpp :: demo/demo.gguf", "[AUTO: projector next to model]", str(stubbin),
+                        "improve", "", "", 0, 384, 12, False, 2048, 512, 128, 30, 0,
+                        required_exact_phrases="living room\nlaptop",
+                        forbidden_exact_phrases="rice field")
+                    self.assertEqual(blocked[0], "")
+                    self.assertFalse(blocked[5])
+                    self.assertIn("BLOKADA", blocked[4])
             finally:
                 del sys.modules["folder_paths"]
                 del sys.modules[module_name]

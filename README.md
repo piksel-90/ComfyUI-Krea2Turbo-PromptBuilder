@@ -1,6 +1,6 @@
 # ComfyUI — Krea 2 Turbo Prompt Builder
 
-**v0.1.2 (prototype / alpha)** · One generated image → one improved **en-US** prompt, with an evidence-based scene analysis and keep/change plan.
+**v0.1.3 (prototype / alpha)** · One generated image → one improved **en-US** prompt, with an evidence-based scene analysis and keep/change plan.
 
 **Privacy:** No Ollama, remote AI API, or prompt/image upload. VLM inference is run through a **new local `llama-cli` subprocess for every execution**, using pre-downloaded GGUF and `mmproj` files. Model and `llama.cpp` downloads/updates are allowed *outside inference*. The node uses `--offline` during inference and passes only local paths. An OS firewall is still the strongest guarantee against unwanted connections from third-party executables.
 
@@ -12,7 +12,7 @@
 - **Single image** selected by `image_index` from a batch, resized before VLM inference.
 - Choose any compatible **vision-capable GGUF + matching `mmproj*.gguf`** from `ComfyUI/models/llama_cpp/`, `LLM/`, `text_encoders/`, or other registered paths (including abliterated checkpoints, provided their vision components actually work with your llama.cpp build).
 - Compose **faithful**, **improve** (default) or **creative** prompts with optional source prompt / user goal.
-- Outputs `prompt_en_us`, `scene_analysis_en`, `edit_plan_en` and original `IMAGE` (pass-through).
+- Outputs `prompt_en_us`, `scene_analysis_en`, `edit_plan_en` and original `IMAGE` (pass-through). **v0.1.3 appends** `contract_report_pl` (STRING), `contract_ok` (BOOLEAN), and `gpu_offload_info` (STRING), keeping the first four output indices unchanged.
 - Choose `execution_device=cpu|hybrid|gpu`, use `gpu_layers` for hybrid and `vision_gpu` independently, or limit context, batch and token budgets. OS commit-headroom guard for Windows/Linux.
 - Launches isolated process **once per image** and terminates the process tree on timeout. No resident server or Ollama.
 
@@ -70,3 +70,30 @@ The original v0.1 scanned **only** `ComfyUI/models/krea_prompt_builder`, leaving
 - The same ComfyUI node class key is retained, and new widgets are **appended** after old settings, minimizing disruption to saved workflows. Restart ComfyUI, refresh browser, and recreate the node if legacy widget state remains.
 
 **Release status:** automated tests/mock subprocess only; real Gemma 4 b11719 + RTX 4070 inference has not been run by us.
+
+
+### v0.1.3 — answer extraction and one-image scene constraints
+
+**Root cause seen in actual Gemma 4 diagnostic output:** `llama-cli` may write the entire `User:` instruction into `result.txt`, followed by `Assistant:` and a `[Start thinking] ... [End thinking]` draft. v0.1.2 could accidentally parse the instructions or the draft as a final answer. The new parser:
+
+- selects the text after the **last** standalone `Assistant:` marker if present, dropping echoed `User:` content;
+- strips completed `[Start thinking] ... [End thinking]`, `<think> ... </think>`, or recognized thought channels; rejects unfinished thought or thought-only output;
+- selects the **last valid full** `[ANALYSIS]` / `[KEEP]` / `[IMPROVE]` / `[PROMPT]` quartet (or JSON object);
+- refuses boilerplate section placeholders and template text instead of outputting them as the generated prompt;
+- deliberately **does not attempt to manufacture a completed prompt from a truncated thought**. Use `reasoning=off` and an adequate token budget.
+
+**Source-inspired scene contract:** The [Test1 iteration evaluator](https://github.com/piksel-90/Test1/tree/feature/krea2-iteration-evaluator) judges images against `ORIGINAL PROMPT` + `TARGET`, then proposes `KEEP` / `CHANGE`. We reuse that structure for a single image, but keep user constraints separate from model-suggested improvements, without Ollama or a second-image comparison.
+
+New optional inputs (blank by default):
+
+| Input | Meaning |
+|---|---|
+| `scene_contract` | Free-text user requirements to be honored during analysis; **not automatically verified** |
+| `required_exact_phrases` | One case-insensitive **literal phrase** per line required inside `prompt_en_us` |
+| `forbidden_exact_phrases` | One case-insensitive **literal phrase** per line forbidden inside `prompt_en_us` |
+
+For example: `scene_contract=Keep the original room and the child holding a laptop`, required lines `living room` and `laptop`, forbidden lines `rice field` and `meadow`. If a literal test fails, the node outputs an **empty prompt**, `contract_ok=false`, and explains why in `contract_report_pl`. The downstream workflow MUST use `contract_ok` to prevent rendering from an empty prompt. The text check cannot detect synonyms, visual errors, changed faces, ethnicity, or spatial errors; even `contract_ok=true` is **NOT evidence of visual fidelity**. To prevent drift between images, maintain stable source instructions and use a separate visual validation stage if required.
+
+**Offload diagnostics:** the node prints **requested** language GPU layers and an **actual layer count only when reported** by `llama.cpp` stderr. The final text output `gpu_offload_info` is displayable via Show Text. `gpu_layers=16` means partial offload and can be CPU-heavy; CUDA activity cannot be inferred from Windows' "3D" graph alone. `reasoning=off` is default, but old workflow nodes may retain an explicitly saved `auto` value. Clear `source_prompt` when switching to a different test image (e.g. an earlier frog prompt is not appropriate context for a photograph).
+
+**Privacy:** metadata-only logging is default; `save_diagnostics=true` explicitly saves private raw model output to the local output folder. No cloud inference is added. As before, no end-to-end live inference on your RTX 4070 has been performed by this release process.

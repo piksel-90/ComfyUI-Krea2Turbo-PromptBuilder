@@ -27,3 +27,12 @@
 - More precise errors for empty/incomplete responses, nonzero process exits, timeouts.
 - Optional local-only private diagnostics (stdout, stderr, model output), disabled by default.
 - Add regression tests for new parsing, device flags and diagnostic privacy.
+
+## 0.1.3 — 2026-10-18
+
+- Fix `llama-cli` echoed-User prompt and Gemma thought-channel leakage. Fail closed on unfinished/only-thinking responses and reject format placeholders; choose last valid assistant-only final result.
+- Refine image-grounded instructions to preserve users' original scene instead of adding invented people, locations and decorations.
+- Add opt-in `scene_contract`, required/forbidden literal phrases, and clear Polish contract report with blocking on violations. No semantic/visual verification is claimed.
+- Preserve the first four node output positions and append `contract_report_pl`, `contract_ok`, `gpu_offload_info`.
+- Parse actual GPU layer offload information from llama.cpp stderr when available; never infer offload count from the GPU utilization graph.
+- Extend automated regressions with synthetic prompt-echo, complete/incomplete thinking and scene-contract failures. Raw personal diagnostic content is not committed.

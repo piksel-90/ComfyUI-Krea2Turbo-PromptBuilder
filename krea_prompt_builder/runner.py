@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -58,7 +59,7 @@ def make_command(
         "--image", str(image), "-p", instruction,
         "-o", str(output_path),
         "--offline", "--single-turn", "--simple-io",
-        "--no-display-prompt", "--no-show-timings", "--no-warmup",
+        "--no-display-prompt", "--no-warmup",
         "--log-verbosity", "1", "--log-colors", "off",
         "--ctx-size", str(context_size), "--predict", str(max_tokens),
         "--batch-size", str(batch_size), "--ubatch-size", str(min(256, batch_size)),
@@ -92,6 +93,21 @@ def terminate_tree(proc: subprocess.Popen):
         pass
 
 
+def parse_gpu_offload(stderr: str) -> str:
+    """Extract confirmed layers from llama.cpp stderr; never infer from VRAM graph."""
+    patterns = (
+        r"(?i)offloaded\s+(\d+)\s*/\s*(\d+)\s+layers?\b",
+        r"(?i)offloading\s+(\d+)\s*/\s*(\d+)\s+layers?\b",
+    )
+    found = []
+    for pattern in patterns:
+        found.extend((int(a), int(b)) for a, b in re.findall(pattern, stderr))
+    if not found:
+        return "not reported by llama.cpp; inspect private local stderr if needed"
+    done, total = found[-1]
+    return f"{done}/{total} language-model layers reported on GPU"
+
+
 def _diagnostic_summary(payload: str, stdout: str, stderr: str, file_exists: bool) -> str:
     # Do not show or print private content by default.
     if not payload.strip():
@@ -108,7 +124,8 @@ def _diagnostic_summary(payload: str, stdout: str, stderr: str, file_exists: boo
 
 def _store_diagnostics(directory: Path | None, *, model: Path, output_mode: str,
                        execution_device: str, code: int | None, elapsed: float,
-                       stdout: str, stderr: str, result: str) -> Path | None:
+                       stdout: str, stderr: str, result: str,
+                       gpu_layers: int, offload_summary: str) -> Path | None:
     if directory is None:
         return None
     directory = Path(directory).expanduser().resolve()
@@ -121,6 +138,7 @@ def _store_diagnostics(directory: Path | None, *, model: Path, output_mode: str,
     (run_dir / "meta.json").write_text(json.dumps({
         "model_filename": model.name, "mode": output_mode, "device": execution_device,
         "exit_code": code, "elapsed_seconds": round(elapsed, 2),
+        "gpu_layers_requested": gpu_layers, "gpu_offload_reported": offload_summary,
         "WARNING": "LOCAL PRIVATE CONTENT: diagnostics may include image-derived text and prompts",
     }, indent=2), encoding="utf-8")
     return run_dir
@@ -168,10 +186,14 @@ def run_once(
             stderr = stderr_bytes.decode("utf-8", errors="replace")
             file_exists = result_path.exists()
             result_text = result_path.read_text(encoding="utf-8", errors="replace") if file_exists else ""
+            offload_summary = parse_gpu_offload(stderr)
+            requested_gpu_layers = 0 if execution_device == "cpu" else 999 if execution_device == "gpu" else gpu_layers
+            LOG.info("llama.cpp GPU layers requested=%s, actual=%s", requested_gpu_layers, offload_summary)
             diag = _store_diagnostics(diagnostics_dir, model=model, output_mode=output_mode,
                                       execution_device=execution_device, code=proc.returncode,
                                       elapsed=time.monotonic()-start, stdout=stdout,
-                                      stderr=stderr, result=result_text)
+                                      stderr=stderr, result=result_text,
+                                      gpu_layers=requested_gpu_layers, offload_summary=offload_summary)
             where = f" Local diagnostics: {diag}" if diag else " Enable save_diagnostics to inspect local raw output."
             if timed_out:
                 raise TimeoutError(f"VLM timed out after {timeout_seconds}s; process tree terminated.{where}")
@@ -187,6 +209,8 @@ def run_once(
                 try:
                     parsed = parse_result(payload)
                     LOG.info("Local VLM completed; parsed %s; no resident server", origin)
+                    parsed["_gpu_offload_info"] = (f"Requested GPU layers: {requested_gpu_layers}. "
+                                                    f"llama.cpp reported: {offload_summary}.")
                     return parsed
                 except ValueError:
                     errors.append(f"{origin}: {_diagnostic_summary(payload, stdout, stderr, file_exists)}")

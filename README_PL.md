@@ -67,11 +67,9 @@ Program nie implementuje wysyłania promptów ani obrazów na internetowe API. W
 
 Testy jednostkowe oraz test symulujący `llama-cli` są przewidziane w `tests/`. **Brak jeszcze realnego testu na GPU 12 GB z konkretnymi wagami Gemma 4/Qwen3.5.** To alfa V0.1, a nie deklaracja pełnej zgodności sprzętowej.
 
-## Publikacja na GitHub
+## Repozytorium GitHub
 
-Jeśli repozytorium nie istnieje, utwórz **puste** `piksel-90/ComfyUI-Krea2Turbo-PromptBuilder` na GitHubie. Projekt ma już przygotowany lokalny commit i tag `v0.1.0`.
-
-W katalogu repozytorium wykonaj `scripts/publish-after-repo-created.ps1` (PowerShell) lub `scripts/publish-after-repo-created.sh` (Bash), przy działającym uwierzytelnieniu Git. Alternatywnie zaimportuj załączony plik `.bundle` jako lokalne repo i wypchnij `main` i `v0.1.0`.
+Aktualny kod: https://github.com/piksel-90/ComfyUI-Krea2Turbo-PromptBuilder . Stara instrukcja tworzenia pustego repozytorium z v0.1.0 jest nieaktualna; repozytorium już istnieje.
 
 
 ## Diagnostyka V0.1.1 — pusta lista modeli / llama-cli
@@ -124,3 +122,23 @@ Przy błędzie node wyświetli lokalną ścieżkę do zapisanych plików. Pliki 
 **Instalacja:** podmień cały katalog dodatku plikami V0.1.2, nie kopiuj GGUF ani `mmproj` ponownie. Zrestartuj ComfyUI i odśwież przeglądarkę; jeśli stare widgety zostaną w istniejącym nodzie, usuń tylko stary Prompt Builder i dodaj go ponownie, podpinając dotychczasowe przewody. `llama-cli.exe` zostaje tam, gdzie go zainstalowałeś.
 
 **Uwaga:** projekt nadal wymaga realnego testu z Twoim `llama.cpp` b11719 / Gemma 4 / RTX 4070. Testy jednostkowe nie dowodzą, że model widzi obraz w tej konfiguracji.
+
+
+## V0.1.3 — naprawa echa/thinking i ochrona wymagań sceny
+
+Najważniejsza poprawka dotyczy rzeczywistego błędu z Gemmy 4. W pliku `result.txt` model potrafił wypisać **cały prompt wejściowy** od `User:`, następnie `Assistant:`, blok `[Start thinking]` i urwany wynik tuż przed `[End thinking]`. Stary parser mógł wówczas uznać szablon instrukcji lub szkic rozumowania za finalny prompt. **Teraz nie jest to akceptowane.** Jeśli po usunięciu echa i części thinking nie ma kompletnej odpowiedzi, node kończy zadanie czytelnym błędem, bez przekazywania bezużytecznego promptu do Krea.
+
+**Pola z Test1 przystosowane do jednego obrazu:** nadal używaj `source_prompt` jako oryginalnego kontekstu i `user_goal` jako celu zmian. Opcjonalny `scene_contract` to jawnie opisane niezmienne wymagania (np. „to samo pomieszczenie, jedna postać, laptop w dłoniach”). Nie traktujemy propozycji VLM jako nowych wymagań użytkownika.
+
+Dodatkowe opcjonalne pola:
+
+- `required_exact_phrases` — każda linia to dosłowna fraza, która **musi** pojawić się w nowym angielskim prompcie, np. `living room`, `laptop`.
+- `forbidden_exact_phrases` — każda linia to dosłowna fraza **zakazana** w prompcie, np. `rice field`, `meadow`.
+
+Trzy **nowe wyjścia na końcu** (dotychczasowe cztery zachowują kolejność): `contract_report_pl`, `contract_ok` (BOOLEAN), `gpu_offload_info`. Jeśli naruszono regułę literalną, `prompt_en_us` jest pusty, `contract_ok=false` i w polskim raporcie widać brakującą lub zabronioną frazę. **W workflow podłącz `contract_ok` do bramki/blokady kolejnej generacji**; nie przekazuj pustego promptu do Krea. Jest to ochrona tekstowa, **nie gwarancja wierności obrazu** — sprawdzenie wizualne nadal musi być niezależne.
+
+`gpu_offload_info` wyświetla liczbę warstw wysłanych na GPU tylko wtedy, gdy `llama.cpp` rzeczywiście ją podał w stderr. Jeśli informacja nie występuje, wyświetlany jest brak potwierdzenia, a nie zmyślona liczba. Wciąż można używać `cpu`, `hybrid` i `gpu` oraz osobnego `vision_gpu`. Domyślny `reasoning=off`; jeśli stary node zapisuje `auto`, przestaw ręcznie.
+
+**Instalacja:** podmień kod dodatku na V0.1.3 i uruchom ponownie ComfyUI. Model GGUF, `mmproj` i `llama-cli.exe` zostają tam, gdzie były. Gdy zmieniasz obraz testowy, usuń nieaktualny tekst z `source_prompt` (np. „żabka” podczas analizy fotografii), aby nie wprowadzać modelu w błąd.
+
+**Stan:** testy jednostkowe i symulowane CLI, bez gwarancji poprawności wizji Gemmy / Qwena. Nie instalujemy Ollamy, nie wysyłamy obrazu ani promptu na zewnętrzne API. Logi diagnostyczne mogą zawierać prywatne treści — włączaj je tylko do lokalnego debugowania.
