@@ -1,3 +1,21 @@
+## 0.1.5 — 2026-10-19
+
+- Fix real Gemma 4 bilingual outputs using `ANALYSIS_EN: ...` style rather than bracketed `[ANALYSIS_EN]` headings; both forms and mixed/on-line content are now supported.
+- Require all six non-empty fields plus standalone final `[END]`, with intact echo/thinking/truncation safeguards.
+- Add synthetic regression cases and exercise the actual private `result.txt` locally without publishing its contents.
+- Keep all nine output ports, widget order, one-process local `llama.cpp`, and compact frontend unchanged.
+- Unit tests/mock inference only; end-to-end accuracy on the user's RTX 4070 still requires validation.
+
+## 0.1.4 — 2026-10-18
+
+- Generate **English prompt/analysis and Polish scene analysis/edit plan in a single local VLM response**, default `report_language=pl_en` and optional legacy `en_only`.
+- Append `scene_analysis_pl` and `edit_plan_pl` after the original seven outputs (no port reordering). `contract_report_pl` remains a separate literal-contract diagnostic.
+- Extend the schema parser to require all six fields for bilingual JSON or six labelled bilingual sections ending in `[END]`; fail closed on truncated or thinking-only responses.
+- Add **optional** compact ComfyUI frontend `web/compact.js`: Basic, Advanced, Diagnostics, All. Hide widgets visually while preserving values; do not change how inference works if JS is absent.
+- Raise default generated-token budget to 1600 for new workflows; existing saved widget values are retained.
+- Add regression tests for mixed PL/EN responses, echo and thinking removal, truncation, single-process inference and frontend visibility/state.
+- Automated tests/mock backend only; model vision reliability remains unverified. No Ollama, cloud inference or private-data upload.
+
 # Changelog
 
 ## 0.1.0 — 2026-10-18

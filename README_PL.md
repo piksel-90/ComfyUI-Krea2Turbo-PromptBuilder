@@ -1,6 +1,46 @@
-# Krea 2 Turbo — Prompt Builder v0.1.2 (ComfyUI)
+## Poprawka V0.1.5 — nagłówki w odpowiedzi Gemmy
+
+W V0.1.4 Gemma poprawnie kończyła raport PL+EN, ale używała `ANALYSIS_EN:`
+zamiast `[ANALYSIS_EN]`. Parser odrzucał takie odpowiedzi mimo obecności
+wszystkich sześciu sekcji i `[END]`. W V0.1.5 oba warianty (także mieszane,
+z treścią w tej samej linii) są rozpoznawane. Nie akceptujemy odpowiedzi
+uciętych, z brakującymi sekcjami ani samych ech instrukcji.
+
+**Bez zmian w modelach, mmproj, `llama-cli.exe`, 9 portach i kolejności widgetów.**
+Wystarczy podmienić dodatek i ponownie uruchomić ComfyUI.
+Nie wysyłamy obrazu ani promptu do zewnętrznych usług.
+
+---
+
+# Krea 2 Turbo — Prompt Builder v0.1.5 (ComfyUI)
 
 **Wersja alfa do prób.** Wygenerowany obraz → analiza sceny → lista co zostawić i co poprawić → ulepszony prompt en-US. Jeden obraz, nie ranking dwóch obrazów.
+
+## Szybki start V0.1.5 — jeden model, dwa języki
+
+**Nowe w wydaniu:** `report_language=pl_en` (domyślnie) wymaga od jednego, lokalnego `llama-cli` sześciu pól: analizy, KEEP/IMPROVE i promptu po angielsku oraz analizy i planu zmian po polsku. Jest to **jedna inferencja, jeden proces**, nie dodatkowy model ani osobne tłumaczenie. W `plain_sections` odpowiedź musi zakończyć się znacznikiem `[END]`; uciętej odpowiedzi nie przepuszczamy do Krea. Jeśli model nie umie dokończyć PL+EN, spróbuj zwiększyć `max_tokens` (np. 1600–2200), zachowując `reasoning=off`. `report_language=en_only` przywraca stary, czteropolowy format.
+
+Pierwsze siedem wyjść pozostaje na tych samych pozycjach. **Na końcu dodano:**
+
+- `scene_analysis_pl` (`STRING`) — szczegółowy opis obserwacji i niepewności po polsku.
+- `edit_plan_pl` (`STRING`) — po polsku `ZACHOWAĆ / ZMIENIĆ` z uzasadnieniem.
+
+`contract_report_pl` **nie jest opisem sceny**. Nadal przekazuje wyłącznie wyniki technicznych sprawdzeń dosłownych fraz, więc bez podanych reguł wypisuje „BRAK REGUŁ LITERALNYCH”. Do `Show Text` z polskim opisem podłącz `scene_analysis_pl`.
+
+### Kompaktowy interfejs
+
+V0.1.5 ma dodatkowe rozszerzenie frontendowe `web/compact.js`. Ostatni widget `⚙ Settings panel` przełącza:
+
+- `Basic`: model, `mode`, `user_goal`, `source_prompt`, język raportu.
+- `Advanced`: dodatkowo `mmproj`, ścieżka `llama-cli`, CPU/GPU/Hybrid, budżety i pliki.
+- `Diagnostics`: dodatkowo kontrakt, frazy i lokalne logi.
+- `All`: wszystkie standardowe kontrolki, jak w poprzednim wydaniu.
+
+Ukryte ustawienia **nie są zerowane i nie przestają trafiać do backendu**. Rozszerzenie jest opcjonalne — jeśli frontend ComfyUI nie obsługuje zwijania, node nadal wykonuje analizę i wyświetla zwykłe widgety. Po aktualizacji zrestartuj ComfyUI i odśwież przeglądarkę (Ctrl+F5). Ustaw `Advanced` lub `All`, aby wskazać `llama_cli_path` podczas pierwszej instalacji.
+
+Dla RTX 4070 / Gemmy 12B przetestowane przez użytkownika ustawienia to `hybrid`, `gpu_layers=16`, `vision_gpu=false`, `reasoning=off`; nie traktuj ich jako gwarancji wydajności, trafności wizji ani VRAM. Sprawdzenie V0.1.5 obejmuje testy symulowane — **rzeczywiste EN+PL na Twoim modelu trzeba jeszcze przetestować**.
+
+---
 
 ## Założenia
 
@@ -16,7 +56,7 @@
 1. Wypakuj projekt do `ComfyUI/custom_nodes/ComfyUI-Krea2Turbo-PromptBuilder/`.
 2. Pobierz lokalną binarkę najnowszego kompatybilnego `llama.cpp` z `llama-cli` (Windows: `llama-cli.exe`). Trzymaj ją poza folderem projektu albo dodaj do PATH.
 3. Umieść **model GGUF i zgodny mmproj** w dowolnym z już używanych katalogów: `ComfyUI/models/llama_cpp/`, `ComfyUI/models/LLM/`, `ComfyUI/models/text_encoders/` lub dawnym `ComfyUI/models/krea_prompt_builder/`. **Nie kopiuj modelu drugi raz.** Obsługiwane są też dodatkowe ścieżki z `folder_paths` (np. `extra_model_paths.yaml`).
-4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.2** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
+4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.5** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
 5. Wpisz ścieżkę `llama_cli_path` do pliku wykonywalnego (np. `D:\\AI\\llama.cpp\\build\\bin\\Release\\llama-cli.exe`) albo `llama-cli`, jeśli jest w PATH.
 
 ## Podłączenie obrazu
@@ -50,8 +90,10 @@ Jeżeli **RAM/VRAM Purge** ma wyjście, dołącz je do opcjonalnego wejścia `af
 - `scene_analysis_en` (`STRING`): analiza tego, co rzeczywiście widać w obrazie.
 - `edit_plan_en` (`STRING`): sekcje `KEEP` i `IMPROVE`.
 - `image` (`IMAGE`): niezmieniony tensor wejściowy, do dalszego połączenia.
+- `contract_report_pl`, `contract_ok`, `gpu_offload_info`: dotychczasowe diagnostyczne wyjścia z v0.1.3.
+- `scene_analysis_pl`, `edit_plan_pl`: nowe wyjścia v0.1.5, na końcu listy.
 
-Wersja 0.1 generuje JSON w **jednym wywołaniu VLM**. Node rozdziela pola i nie próbuje „poprawiać” rezultatu innym modelem. Przy niepoprawnym JSON zwraca błąd zamiast wprowadzać śmieci do promptu.
+Wersja V0.1.5 generuje sekcje lub JSON (według `output_mode`) w **jednym wywołaniu VLM**. Node rozdziela pola i nie próbuje „poprawiać” rezultatu innym modelem. Przy niepoprawnym JSON zwraca błąd zamiast wprowadzać śmieci do promptu.
 
 ## RAM/VRAM
 

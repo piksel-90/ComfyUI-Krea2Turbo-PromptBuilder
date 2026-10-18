@@ -14,7 +14,7 @@ import threading
 import time
 from uuid import uuid4
 
-from .prompting import SCHEMA, parse_result
+from .prompting import SCHEMA, SCHEMA_BILINGUAL, REPORT_LANGUAGES, parse_result
 
 LOG = logging.getLogger("ComfyUI-KreaPromptBuilder")
 _SEMAPHORE = threading.Lock()
@@ -150,13 +150,16 @@ def run_once(
     batch_size: int, projector_gpu: bool, timeout_seconds: int,
     execution_device: str = "hybrid", output_mode: str = "plain_sections",
     reasoning: str = "off", diagnostics_dir: Path | None = None,
+    report_language: str = "en_only",
 ) -> dict[str, str]:
+    if report_language not in REPORT_LANGUAGES:
+        raise ValueError(f"Invalid report language: {report_language}")
     with _SEMAPHORE:
         with tempfile.TemporaryDirectory(prefix="krea_cli_") as tmp:
             base = Path(tmp)
             result_path = base / "result.txt"
             schema_path = base / "schema.json"
-            schema_path.write_text(json.dumps(SCHEMA), encoding="utf-8")
+            schema_path.write_text(json.dumps(SCHEMA_BILINGUAL if report_language == "pl_en" else SCHEMA), encoding="utf-8")
             cmd = make_command(executable, model, mmproj, image, schema_path, result_path,
                                instruction, gpu_layers, context_size, max_tokens, batch_size,
                                projector_gpu, execution_device, output_mode, reasoning)
@@ -207,7 +210,7 @@ def run_once(
                 if not payload.strip():
                     continue
                 try:
-                    parsed = parse_result(payload)
+                    parsed = parse_result(payload, require_polish=(report_language == "pl_en"))
                     LOG.info("Local VLM completed; parsed %s; no resident server", origin)
                     parsed["_gpu_offload_info"] = (f"Requested GPU layers: {requested_gpu_layers}. "
                                                     f"llama.cpp reported: {offload_summary}.")

@@ -11,7 +11,7 @@ from .krea_prompt_builder.images import save_one_image
 from .krea_prompt_builder.contract import evaluate_text_contract
 from .krea_prompt_builder.memory import enforce_headroom
 from .krea_prompt_builder.models import catalog, select_gguf, resolve_projector
-from .krea_prompt_builder.prompting import build_instruction, MODES
+from .krea_prompt_builder.prompting import build_instruction, MODES, REPORT_LANGUAGES
 from .krea_prompt_builder.runner import find_executable, run_once
 
 LOG = logging.getLogger("ComfyUI-KreaPromptBuilder")
@@ -45,7 +45,7 @@ class KreaPromptBuilder:
                 "gpu_layers": ("INT", {"default": 24, "min": 0, "max": 200}),
                 "vision_gpu": ("BOOLEAN", {"default": True}),
                 "context_size": ("INT", {"default": 4096, "min": 2048, "max": 16384, "step": 1024}),
-                "max_tokens": ("INT", {"default": 900, "min": 256, "max": 4096}),
+                "max_tokens": ("INT", {"default": 1600, "min": 256, "max": 4096}),
                 "batch_size": ("INT", {"default": 512, "min": 128, "max": 2048, "step": 128}),
                 "timeout_seconds": ("INT", {"default": 300, "min": 30, "max": 1800}),
                 "commit_headroom_gib": ("FLOAT", {"default": 6.0, "min": 0.0, "max": 48.0, "step": 1.0}),
@@ -64,11 +64,12 @@ class KreaPromptBuilder:
                                            "tooltip": "One exact case-insensitive phrase per line that MUST occur in generated prompt."}),
                 "forbidden_exact_phrases": ("STRING", {"default": "", "multiline": True,
                                             "tooltip": "One exact case-insensitive phrase per line that must NOT occur in prompt."}),
+                "report_language": (list(REPORT_LANGUAGES), {"default": "pl_en", "tooltip": "PL and EN from ONE local VLM inference. en_only retains the previous format."}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "IMAGE", "STRING", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image", "contract_report_pl", "contract_ok", "gpu_offload_info")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "IMAGE", "STRING", "BOOLEAN", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image", "contract_report_pl", "contract_ok", "gpu_offload_info", "scene_analysis_pl", "edit_plan_pl")
     FUNCTION = "build"
     CATEGORY = "Krea/Prompt Builder"
     DESCRIPTION = "One IMAGE -> a Krea 2 Turbo prompt via local VLM GGUF in disposable llama.cpp process."
@@ -80,12 +81,13 @@ class KreaPromptBuilder:
         commit_headroom_gib, after_purge=None, model_path_override="", mmproj_path_override="",
         execution_device="hybrid", output_mode="plain_sections", reasoning="off", save_diagnostics=False,
         scene_contract="", required_exact_phrases="", forbidden_exact_phrases="",
+        report_language="pl_en",
     ):
         _, _, known_paths = catalog(MODEL_ROOT, folder_paths)
         model = select_gguf(model_gguf, known_paths, model_path_override)
         mmproj = resolve_projector(mmproj_gguf, model, known_paths, mmproj_path_override)
         executable = find_executable(llama_cli_path)
-        instruction = build_instruction(mode, user_goal, source_prompt, output_mode, scene_contract)
+        instruction = build_instruction(mode, user_goal, source_prompt, output_mode, scene_contract, report_language)
         if save_diagnostics:
             output_dir = (Path(folder_paths.get_output_directory()) if hasattr(folder_paths, "get_output_directory")
                           else MODEL_ROOT.parent / "output")
@@ -103,16 +105,19 @@ class KreaPromptBuilder:
                 gpu_layers, context_size, max_tokens, batch_size,
                 vision_gpu, timeout_seconds,
                 execution_device=execution_device, output_mode=output_mode,
-                reasoning=reasoning, diagnostics_dir=diagnostics_dir,
+                reasoning=reasoning, diagnostics_dir=diagnostics_dir, report_language=report_language,
             )
+        if report_language == "pl_en" and not (result.get("analysis_pl", "").strip() and result.get("edit_plan_pl", "").strip()):
+            raise ValueError("Bilingual VLM response is missing Polish report fields; check private diagnostics")
         plan = f"KEEP:\n{result['keep']}\n\nIMPROVE:\n{result['improve']}"
         status = evaluate_text_contract(result["prompt_en_us"], required_exact_phrases, forbidden_exact_phrases)
         prompt = result["prompt_en_us"] if status.ok else ""  # fail closed: do not forward a known-violating prompt
         if not status.ok:
             LOG.warning("Prompt blocked by explicit text contract; consult contract_report_pl")
         return (prompt, result["analysis_en"], plan, image, status.report_pl, status.ok,
-                result.get("_gpu_offload_info", "GPU offload not reported"))
+                result.get("_gpu_offload_info", "GPU offload not reported"),
+                result.get("analysis_pl", ""), result.get("edit_plan_pl", ""))
 
 
 NODE_CLASS_MAPPINGS = {"Krea2TurboPromptBuilderV01": KreaPromptBuilder}
-NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.3"}
+NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.5"}

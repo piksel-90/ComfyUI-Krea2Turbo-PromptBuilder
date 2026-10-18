@@ -6,6 +6,16 @@
 
 [Instrukcja po polsku →](README_PL.md)
 
+## v0.1.5 — One local model, bilingual outputs, compact UI
+
+**Default `report_language=pl_en`:** one `llama-cli` process returns the original four English response fields PLUS `analysis_pl` and `edit_plan_pl`, in a single generation. `plain_sections` requires a final `[END]` marker to prevent forwarding truncated reports. `en_only` falls back to legacy response format. No second model or translation API is invoked.
+
+Outputs 0–6 are unchanged, with indices 7 `scene_analysis_pl` and 8 `edit_plan_pl` appended. `contract_report_pl` is an exact-phrase diagnostic, **not** the Polish scene report. The interface now optionally offers `⚙ Settings panel` (`Basic`, `Advanced`, `Diagnostics`, `All`) through `web/compact.js`. Widget values are preserved when hidden; on unsupported frontends the native full node still functions. Choose Advanced/All for `llama_cli_path`.
+
+On Windows ComfyUI portable keep the existing GGUF, matching mmproj and `llama-cli.exe` where they are. New installs may need to set `llama_cli_path` via Advanced. The new default `max_tokens` is 1600 for more room for both languages; saved workflows keep their existing values. An inadequate output budget causes a deliberate error rather than silently returning an incomplete PL report. Tested with mocks and Python/JS unit tests, **not** validated against actual Gemma 4/Qwen on your RTX 4070.
+
+---
+
 ## Functionality
 
 - Accepts **`IMAGE` from `Save Image.images`** on current ComfyUI versions; if your Save Image lacks this output, branch from the same upstream IMAGE.
@@ -97,3 +107,16 @@ For example: `scene_contract=Keep the original room and the child holding a lapt
 **Offload diagnostics:** the node prints **requested** language GPU layers and an **actual layer count only when reported** by `llama.cpp` stderr. The final text output `gpu_offload_info` is displayable via Show Text. `gpu_layers=16` means partial offload and can be CPU-heavy; CUDA activity cannot be inferred from Windows' "3D" graph alone. `reasoning=off` is default, but old workflow nodes may retain an explicitly saved `auto` value. Clear `source_prompt` when switching to a different test image (e.g. an earlier frog prompt is not appropriate context for a photograph).
 
 **Privacy:** metadata-only logging is default; `save_diagnostics=true` explicitly saves private raw model output to the local output folder. No cloud inference is added. As before, no end-to-end live inference on your RTX 4070 has been performed by this release process.
+
+## V0.1.5 – Gemma bilingual header compatibility
+
+The bilingual `plain_sections` parser now accepts both the instructed
+`[ANALYSIS_EN]` / `[PROMPT_EN_US]` headings and observed Gemma-style
+`ANALYSIS_EN:` / `PROMPT_EN_US:` headings. Either style can contain its value
+on the same line or the next line. The final standalone `[END]` marker and
+all six populated fields are still mandatory. Prompt echo, thinking, malformed
+ordering and incomplete output remain blocked.
+
+This fixes a real user-provided `llama.cpp` sample that produced complete
+English and Polish content but was rejected because it used colon headings.
+No private sample text, image, model files, or logs are distributed.
