@@ -1,4 +1,4 @@
-# Krea 2 Turbo — Prompt Builder v0.1.1 (ComfyUI)
+# Krea 2 Turbo — Prompt Builder v0.1.2 (ComfyUI)
 
 **Wersja alfa do prób.** Wygenerowany obraz → analiza sceny → lista co zostawić i co poprawić → ulepszony prompt en-US. Jeden obraz, nie ranking dwóch obrazów.
 
@@ -16,7 +16,7 @@
 1. Wypakuj projekt do `ComfyUI/custom_nodes/ComfyUI-Krea2Turbo-PromptBuilder/`.
 2. Pobierz lokalną binarkę najnowszego kompatybilnego `llama.cpp` z `llama-cli` (Windows: `llama-cli.exe`). Trzymaj ją poza folderem projektu albo dodaj do PATH.
 3. Umieść **model GGUF i zgodny mmproj** w dowolnym z już używanych katalogów: `ComfyUI/models/llama_cpp/`, `ComfyUI/models/LLM/`, `ComfyUI/models/text_encoders/` lub dawnym `ComfyUI/models/krea_prompt_builder/`. **Nie kopiuj modelu drugi raz.** Obsługiwane są też dodatkowe ścieżki z `folder_paths` (np. `extra_model_paths.yaml`).
-4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.1** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
+4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.2** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
 5. Wpisz ścieżkę `llama_cli_path` do pliku wykonywalnego (np. `D:\\AI\\llama.cpp\\build\\bin\\Release\\llama-cli.exe`) albo `llama-cli`, jeśli jest w PATH.
 
 ## Podłączenie obrazu
@@ -88,3 +88,39 @@ Po instalacji nowej wersji **zrestartuj ComfyUI** i sprawdź dropdown `model_ggu
 `llama-cli.exe` jest **osobnym programem**; posiadanie GGUF i `mmproj` **nie instaluje** go. Pobierz kompatybilną z GPU paczkę Windows z [oficjalnych wydań llama.cpp](https://github.com/ggml-org/llama.cpp/releases), wypakuj i ustaw `llama_cli_path` na pełną ścieżkę do `llama-cli.exe`. Nie wpisuj tutaj ścieżki GGUF. V0.1.1 nie pobiera żadnego programu ani pliku samodzielnie. `llama.cpp` musi wspierać architekturę wybranego VLM i projektora — tego jeszcze nie potwierdziliśmy na rzeczywistej Gemmie 4.
 
 **Prywatność:** uruchamianie binarki lokalnie nie stanowi samo w sobie gwarancji izolacji sieciowej. Należy używać zaufanej binarki i dla pełnej pewności zablokować jej dostęp do sieci w zaporze. Node przekazuje `--offline` i nie używa zewnętrznych endpointów.
+
+
+## V0.1.2: poprawka dla Gemmy 4 — brak wynikowego JSON
+
+W V0.1.1 zawsze podawaliśmy `-jf schema.json`, a parser wymagał pełnego JSON-u. W niektórych konfiguracjach Gemma 4/llama.cpp generuje zamiast niego dodatkowe rozumowanie albo inny format i node zgłasza ten sam błąd nawet po zmniejszeniu rozmiaru obrazu. **V0.1.2 nie wymusza JSON-u domyślnie.** Prosi o 4 sekcje `[ANALYSIS]`, `[KEEP]`, `[IMPROVE]`, `[PROMPT]`, przy czym parser nadal obsługuje JSON. Nie oznacza to jeszcze potwierdzenia kompatybilności Twojego GGUF/MMProj z binarką.
+
+### Nowe pola (na samym końcu ustawień)
+
+| Pole | Zalecenie dla RTX 4070 12 GB / Gemma 4 |
+|---|---|
+| `execution_device` | `cpu` do testu bez GPU, potem `hybrid` |
+| `gpu_layers` | Używane w `hybrid` (np. 12–16). Ignorowane w `cpu` oraz `gpu` |
+| `vision_gpu` | `false` na początek. W `cpu` zawsze wyłączone |
+| `output_mode` | **`plain_sections`**. `json_schema` tylko na świadomy test |
+| `reasoning` | **`off`** (wyłącza myślenie i ustawia budżet na 0) |
+| `save_diagnostics` | `false` na stałe, `true` gdy potrzebne surowe logi |
+
+**Test CPU**: `execution_device=cpu`, `vision_gpu=false`, `output_mode=plain_sections`, `reasoning=off`, `max_image_side=768`, `context_size=4096`, `max_tokens=900`, `timeout_seconds=600`. Powinien wymagać RAM i być wolniejszy, ale testuje czy powstaje poprawny prompt bez CUDA. Tryb `gpu` oznacza próbę przeniesienia wszystkich warstw do VRAM i może wywołać OOM przy zajętości VRAM po Krea. `hybrid` służy do sterowania ilością offloadu przez `gpu_layers`.
+
+### Lokalna diagnostyka, gdy odpowiedź dalej jest nieczytelna
+
+Włącz `save_diagnostics=true` na **jedno wykonanie**. Pliki znajdziesz w:
+
+```text
+D:\ComfyUI_windows_portable_2\ComfyUI\output\krea_prompt_builder_diagnostics\vlm_...\
+  result.txt
+  stdout.txt
+  stderr.txt
+  meta.json
+```
+
+Przy błędzie node wyświetli lokalną ścieżkę do zapisanych plików. Pliki **mogą zawierać prywatny prompt i opis obrazu**. Nie publikuj ich na GitHubie, nie wysyłaj całego logu, jeśli są tam dane prywatne; wystarczy przekazać krótki opis lub zanonimizowany fragment. Po zdiagnozowaniu wyłącz diagnostykę i usuń foldery testowe. Bez włączenia tej opcji nie zapisujemy wyników do trwałych plików.
+
+**Instalacja:** podmień cały katalog dodatku plikami V0.1.2, nie kopiuj GGUF ani `mmproj` ponownie. Zrestartuj ComfyUI i odśwież przeglądarkę; jeśli stare widgety zostaną w istniejącym nodzie, usuń tylko stary Prompt Builder i dodaj go ponownie, podpinając dotychczasowe przewody. `llama-cli.exe` zostaje tam, gdzie go zainstalowałeś.
+
+**Uwaga:** projekt nadal wymaga realnego testu z Twoim `llama.cpp` b11719 / Gemma 4 / RTX 4070. Testy jednostkowe nie dowodzą, że model widzi obraz w tej konfiguracji.
