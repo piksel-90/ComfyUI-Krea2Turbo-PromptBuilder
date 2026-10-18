@@ -17,3 +17,13 @@
 - Improve missing `llama-cli.exe` diagnostics. No Ollama service or bundled executable.
 - Stop copying raw llama.cpp stderr into general ComfyUI logs, which could expose user input.
 - Add regression tests for cross-folder discovery, auto-mmproj, extra paths, overrides and ambiguity.
+
+
+## 0.1.2 — 2026-10-18
+
+- Choose CPU, hybrid CPU+GPU, or GPU for the language model, with independent projector offload when applicable.
+- Default to plain labelled sections and disabled reasoning, avoiding mandatory JSON schema grammar on Gemma 4.
+- Robustly parse JSON, list-valued keep/improve and complete labelled sections; check both output file and stdout.
+- More precise errors for empty/incomplete responses, nonzero process exits, timeouts.
+- Optional local-only private diagnostics (stdout, stderr, model output), disabled by default.
+- Add regression tests for new parsing, device flags and diagnostic privacy.
