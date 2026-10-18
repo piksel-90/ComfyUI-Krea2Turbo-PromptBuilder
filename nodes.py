@@ -48,6 +48,10 @@ class KreaPromptBuilder:
                 "batch_size": ("INT", {"default": 512, "min": 128, "max": 2048, "step": 128}),
                 "timeout_seconds": ("INT", {"default": 300, "min": 30, "max": 1800}),
                 "commit_headroom_gib": ("FLOAT", {"default": 6.0, "min": 0.0, "max": 48.0, "step": 1.0}),
+                "execution_device": (["hybrid", "cpu", "gpu"], {"default": "hybrid", "tooltip": "CPU uses no language/vision GPU layers; hybrid uses gpu_layers; GPU attempts full offload (may OOM)."}),
+                "output_mode": (["plain_sections", "json_schema"], {"default": "plain_sections", "tooltip": "Gemma 4: try plain_sections first. json_schema uses llama.cpp -jf."}),
+                "reasoning": (["off", "auto"], {"default": "off", "tooltip": "Disable thinking for concise direct output; auto allows model defaults."}),
+                "save_diagnostics": ("BOOLEAN", {"default": False, "tooltip": "Opt-in: save PRIVATE raw llama.cpp output/stdout/stderr to ComfyUI/output/krea_prompt_builder_diagnostics. No upload."}),
             },
             "optional": {
                 "after_purge": (ANY, {"tooltip": "Connect output of RAM/VRAM Purge to enforce execution ordering. If it has no output, sequencing requires a relay node."}),
@@ -67,12 +71,19 @@ class KreaPromptBuilder:
         source_prompt, image_index, max_image_side, gpu_layers, vision_gpu,
         context_size, max_tokens, batch_size, timeout_seconds,
         commit_headroom_gib, after_purge=None, model_path_override="", mmproj_path_override="",
+        execution_device="hybrid", output_mode="plain_sections", reasoning="off", save_diagnostics=False,
     ):
         _, _, known_paths = catalog(MODEL_ROOT, folder_paths)
         model = select_gguf(model_gguf, known_paths, model_path_override)
         mmproj = resolve_projector(mmproj_gguf, model, known_paths, mmproj_path_override)
         executable = find_executable(llama_cli_path)
-        instruction = build_instruction(mode, user_goal, source_prompt)
+        instruction = build_instruction(mode, user_goal, source_prompt, output_mode)
+        if save_diagnostics:
+            output_dir = (Path(folder_paths.get_output_directory()) if hasattr(folder_paths, "get_output_directory")
+                          else MODEL_ROOT.parent / "output")
+            diagnostics_dir = output_dir / "krea_prompt_builder_diagnostics"
+        else:
+            diagnostics_dir = None
         if commit_headroom_gib:
             LOG.info(enforce_headroom(float(commit_headroom_gib)))
         with tempfile.TemporaryDirectory(prefix="krea_input_") as folder:
@@ -83,10 +94,12 @@ class KreaPromptBuilder:
                 executable, model, mmproj, image_path, instruction,
                 gpu_layers, context_size, max_tokens, batch_size,
                 vision_gpu, timeout_seconds,
+                execution_device=execution_device, output_mode=output_mode,
+                reasoning=reasoning, diagnostics_dir=diagnostics_dir,
             )
         plan = f"KEEP:\n{result['keep']}\n\nIMPROVE:\n{result['improve']}"
         return (result["prompt_en_us"], result["analysis_en"], plan, image)
 
 
 NODE_CLASS_MAPPINGS = {"Krea2TurboPromptBuilderV01": KreaPromptBuilder}
-NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.1"}
+NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.2"}
