@@ -1,3 +1,12 @@
+## 0.1.6 — 2026-10-19
+
+- Treat `source_prompt` as the binding intended scene specification (except explicit higher-priority changes), not mere context; separate *observed image* from *desired output*.
+- In the same bilingual local VLM call, request a seventh `CONTRACT_REPORT_PL` field to compare original source, observed image and final EN prompt, and request an explicit `WYNIK_PROMPTU` self-assessment.
+- Replace static `contract_report_pl` output with an input-aware Polish report: original/goal/contract, available VLM assessment and deterministic literal checks. Mark missing VLM reports and uncertainty clearly.
+- Conservatively block an explicit VLM `WYNIK_PROMPTU: NIEZGODNY` as well as existing literal violations; distinguish this fallible self-verdict from independent image validation. A source/image discrepancy is reported, not automatically treated as a final-prompt failure.
+- Keep compatibility with old six-field model replies, all 9 existing output positions and widget order, compact UI, local process/offline behavior. Add synthetic regression cases for source precedence, contradiction blocking, fallbacks and seven-field parsing.
+- Unit/mock tests only; no live 12GB RTX 4070 model validation by this release process.
+
 ## 0.1.5 — 2026-10-19
 
 - Fix real Gemma 4 bilingual outputs using `ANALYSIS_EN: ...` style rather than bracketed `[ANALYSIS_EN]` headings; both forms and mixed/on-line content are now supported.

@@ -8,7 +8,7 @@ import tempfile
 import folder_paths
 
 from .krea_prompt_builder.images import save_one_image
-from .krea_prompt_builder.contract import evaluate_text_contract
+from .krea_prompt_builder.contract import evaluate_scene_contract
 from .krea_prompt_builder.memory import enforce_headroom
 from .krea_prompt_builder.models import catalog, select_gguf, resolve_projector
 from .krea_prompt_builder.prompting import build_instruction, MODES, REPORT_LANGUAGES
@@ -39,7 +39,8 @@ class KreaPromptBuilder:
                 "llama_cli_path": ("STRING", {"default": "llama-cli", "tooltip": "Absolute path or executable in PATH; no Ollama."}),
                 "mode": (list(MODES), {"default": "improve"}),
                 "user_goal": ("STRING", {"default": "", "multiline": True}),
-                "source_prompt": ("STRING", {"default": "", "multiline": True}),
+                "source_prompt": ("STRING", {"default": "", "multiline": True,
+                    "tooltip": "Original intended scene specification. Preserve its requirements unless user_goal or scene_contract explicitly changes them."}),
                 "image_index": ("INT", {"default": 0, "min": 0, "max": 1023}),
                 "max_image_side": ("INT", {"default": 1280, "min": 384, "max": 2048, "step": 64}),
                 "gpu_layers": ("INT", {"default": 24, "min": 0, "max": 200}),
@@ -59,7 +60,7 @@ class KreaPromptBuilder:
                 "model_path_override": ("STRING", {"default": "", "tooltip": "Optional absolute GGUF file path. Leave empty to use model dropdown; no copies needed."}),
                 "mmproj_path_override": ("STRING", {"default": "", "tooltip": "Optional absolute mmproj GGUF path. Leave empty for auto-detection next to model."}),
                 "scene_contract": ("STRING", {"default": "", "multiline": True,
-                                  "tooltip": "Explicit requirements for the scene, not evidence of what the image contains."}),
+                                  "tooltip": "Highest-priority explicit scene constraints. Conflicts with the image must be reported, not hidden."}),
                 "required_exact_phrases": ("STRING", {"default": "", "multiline": True,
                                            "tooltip": "One exact case-insensitive phrase per line that MUST occur in generated prompt."}),
                 "forbidden_exact_phrases": ("STRING", {"default": "", "multiline": True,
@@ -110,7 +111,14 @@ class KreaPromptBuilder:
         if report_language == "pl_en" and not (result.get("analysis_pl", "").strip() and result.get("edit_plan_pl", "").strip()):
             raise ValueError("Bilingual VLM response is missing Polish report fields; check private diagnostics")
         plan = f"KEEP:\n{result['keep']}\n\nIMPROVE:\n{result['improve']}"
-        status = evaluate_text_contract(result["prompt_en_us"], required_exact_phrases, forbidden_exact_phrases)
+        status = evaluate_scene_contract(
+            result["prompt_en_us"], source_prompt=source_prompt, user_goal=user_goal,
+            scene_contract=scene_contract, analysis_pl=result.get("analysis_pl", ""),
+            analysis_en=result.get("analysis_en", ""),
+            model_report_pl=result.get("contract_report_pl", ""),
+            required_exact_phrases=required_exact_phrases,
+            forbidden_exact_phrases=forbidden_exact_phrases,
+        )
         prompt = result["prompt_en_us"] if status.ok else ""  # fail closed: do not forward a known-violating prompt
         if not status.ok:
             LOG.warning("Prompt blocked by explicit text contract; consult contract_report_pl")
@@ -120,4 +128,4 @@ class KreaPromptBuilder:
 
 
 NODE_CLASS_MAPPINGS = {"Krea2TurboPromptBuilderV01": KreaPromptBuilder}
-NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.5"}
+NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.6"}

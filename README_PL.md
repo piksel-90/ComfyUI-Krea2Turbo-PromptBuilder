@@ -1,3 +1,14 @@
+# V0.1.6 — source_prompt naprawdę uczestniczy w kontroli zgodności
+
+- `source_prompt` traktujemy jako **zamierzoną specyfikację sceny**, a nie tylko inspirację. Priorytety: `scene_contract` → jawna zmiana z `user_goal` → pozostałe wymagania `source_prompt` → sugestie stylistyczne modelu.
+- **Jeden** lokalny przebieg VLM zwraca prompt EN, analizę PL+EN, plan zmian i nową ocenę `CONTRACT_REPORT_PL` (zawartość raportu jest częścią tej samej odpowiedzi modelu). Bez drugiej Gemmy.
+- `contract_report_pl` łączy **rzeczywiste wejścia** (`source_prompt`, `user_goal`, `scene_contract`), ocenę VLM „źródło vs obraz vs wygenerowany prompt” i oddzielne sprawdzanie fraz literalnych. Przy braku raportu z modelu wyraźnie zgłasza brak weryfikacji zamiast powtarzać jedną linijkę.
+- Gdy VLM jawnie zwróci osobną linię `WYNIK_PROMPTU: NIEZGODNY`, wynikowy `prompt_en_us` jest blokowany (`contract_ok=false`). Sam konflikt obrazu z oryginałem **nie blokuje** poprawionego promptu, jeśli prompt nadal respektuje zamierzony opis. `WYNIK_PROMPTU: NIEPEWNY` jest opisywany jako niepewny, nie jako potwierdzona zgodność.
+- **Granice:** samoocena modelu może się mylić! `contract_ok=true` NIE jest niezależnym potwierdzeniem wizji ani pełnym semantycznym audytem. Reguły `required_exact_phrases` i `forbidden_exact_phrases` nadal pozostają jedyną deterministyczną kontrolą dosłownych ciągów tekstu.
+- Zachowane **9 portów**, ich indeksy i widgety. `pl_en` oczekuje teraz 7 pól i `[END]`, ale parser obsługuje też starszy format 6 pól. Na początek użyj `reasoning=off`, `plain_sections` i `max_tokens` około **1800–2400** — to zalecenie testowe, nie konieczna zmiana zapisanych wartości.
+
+---
+
 ## Poprawka V0.1.5 — nagłówki w odpowiedzi Gemmy
 
 W V0.1.4 Gemma poprawnie kończyła raport PL+EN, ale używała `ANALYSIS_EN:`
@@ -12,20 +23,20 @@ Nie wysyłamy obrazu ani promptu do zewnętrznych usług.
 
 ---
 
-# Krea 2 Turbo — Prompt Builder v0.1.5 (ComfyUI)
+# Krea 2 Turbo — Prompt Builder v0.1.6 (ComfyUI)
 
 **Wersja alfa do prób.** Wygenerowany obraz → analiza sceny → lista co zostawić i co poprawić → ulepszony prompt en-US. Jeden obraz, nie ranking dwóch obrazów.
 
-## Szybki start V0.1.5 — jeden model, dwa języki
+## Szybki start V0.1.6 — jeden model, dwa języki
 
-**Nowe w wydaniu:** `report_language=pl_en` (domyślnie) wymaga od jednego, lokalnego `llama-cli` sześciu pól: analizy, KEEP/IMPROVE i promptu po angielsku oraz analizy i planu zmian po polsku. Jest to **jedna inferencja, jeden proces**, nie dodatkowy model ani osobne tłumaczenie. W `plain_sections` odpowiedź musi zakończyć się znacznikiem `[END]`; uciętej odpowiedzi nie przepuszczamy do Krea. Jeśli model nie umie dokończyć PL+EN, spróbuj zwiększyć `max_tokens` (np. 1600–2200), zachowując `reasoning=off`. `report_language=en_only` przywraca stary, czteropolowy format.
+**Zachowane:** `report_language=pl_en` (domyślnie) używa jednego lokalnego `llama-cli`. V0.1.6 prosi o siedem pól: analizy, KEEP/IMPROVE i promptu po angielsku oraz analizy i planu zmian po polsku oraz raportu zgodności po polsku. Jest to **jedna inferencja, jeden proces**, nie dodatkowy model ani osobne tłumaczenie. W `plain_sections` odpowiedź musi zakończyć się znacznikiem `[END]`; uciętej odpowiedzi nie przepuszczamy do Krea. Jeśli model nie umie dokończyć PL+EN, spróbuj zwiększyć `max_tokens` (np. 1600–2200), zachowując `reasoning=off`. `report_language=en_only` przywraca stary, czteropolowy format.
 
 Pierwsze siedem wyjść pozostaje na tych samych pozycjach. **Na końcu dodano:**
 
 - `scene_analysis_pl` (`STRING`) — szczegółowy opis obserwacji i niepewności po polsku.
 - `edit_plan_pl` (`STRING`) — po polsku `ZACHOWAĆ / ZMIENIĆ` z uzasadnieniem.
 
-`contract_report_pl` **nie jest opisem sceny**. Nadal przekazuje wyłącznie wyniki technicznych sprawdzeń dosłownych fraz, więc bez podanych reguł wypisuje „BRAK REGUŁ LITERALNYCH”. Do `Show Text` z polskim opisem podłącz `scene_analysis_pl`.
+`contract_report_pl` **nie zastępuje `scene_analysis_pl`**. Od V0.1.6 zawiera źródłowe wymagania, cel, ocenę zgodności wygenerowaną przez VLM (jeśli jest obecna) oraz osobno weryfikację fraz literalnych. Jeśli nie podano wymagań lub model pominie ocenę, raport to wyraźnie opisze. Pełny polski opis obrazu pozostaje w `scene_analysis_pl`.
 
 ### Kompaktowy interfejs
 
@@ -56,7 +67,7 @@ Dla RTX 4070 / Gemmy 12B przetestowane przez użytkownika ustawienia to `hybrid`
 1. Wypakuj projekt do `ComfyUI/custom_nodes/ComfyUI-Krea2Turbo-PromptBuilder/`.
 2. Pobierz lokalną binarkę najnowszego kompatybilnego `llama.cpp` z `llama-cli` (Windows: `llama-cli.exe`). Trzymaj ją poza folderem projektu albo dodaj do PATH.
 3. Umieść **model GGUF i zgodny mmproj** w dowolnym z już używanych katalogów: `ComfyUI/models/llama_cpp/`, `ComfyUI/models/LLM/`, `ComfyUI/models/text_encoders/` lub dawnym `ComfyUI/models/krea_prompt_builder/`. **Nie kopiuj modelu drugi raz.** Obsługiwane są też dodatkowe ścieżki z `folder_paths` (np. `extra_model_paths.yaml`).
-4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.5** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
+4. Zrestartuj ComfyUI, dodaj **Krea 2 Turbo | Prompt Builder v0.1.6** i wybierz model z listy. `mmproj_gguf` może pozostać na `[AUTO: projector next to model]`. Jeśli widzisz stary node, odśwież przeglądarkę lub dodaj node ponownie.
 5. Wpisz ścieżkę `llama_cli_path` do pliku wykonywalnego (np. `D:\\AI\\llama.cpp\\build\\bin\\Release\\llama-cli.exe`) albo `llama-cli`, jeśli jest w PATH.
 
 ## Podłączenie obrazu
@@ -77,7 +88,7 @@ Jeżeli **RAM/VRAM Purge** ma wyjście, dołącz je do opcjonalnego wejścia `af
 | `llama_cli_path` | Pełna ścieżka do binarki `llama-cli` |
 | `mode` | `faithful`, `improve` (domyślnie), `creative` |
 | `user_goal` | Własna instrukcja (PL lub EN) |
-| `source_prompt` | Opcjonalny oryginalny prompt; pomaga zachować zamiar autora |
+| `source_prompt` | Pierwotna specyfikacja docelowej sceny; wymagana jest jej zgodność w końcowym prompcie, o ile `scene_contract` lub `user_goal` jawnie nie zezwalają na zmianę. Różnica względem obrazu trafia do raportu (ocena VLM, nie dowód) |
 | `gpu_layers` | Liczba warstw przeniesionych do VRAM; 0 = CPU |
 | `vision_gpu` | Czy projektor wizualny ma działać na GPU |
 | `commit_headroom_gib` | Minimalny zapas pamięci zatwierdzonej systemu, domyślnie 6 GiB |
@@ -90,10 +101,10 @@ Jeżeli **RAM/VRAM Purge** ma wyjście, dołącz je do opcjonalnego wejścia `af
 - `scene_analysis_en` (`STRING`): analiza tego, co rzeczywiście widać w obrazie.
 - `edit_plan_en` (`STRING`): sekcje `KEEP` i `IMPROVE`.
 - `image` (`IMAGE`): niezmieniony tensor wejściowy, do dalszego połączenia.
-- `contract_report_pl`, `contract_ok`, `gpu_offload_info`: dotychczasowe diagnostyczne wyjścia z v0.1.3.
+- `contract_report_pl`: polski raport wymagań oraz weryfikacji modelowej i literalnej; `contract_ok`: wykryta jawna sprzeczność blokuje prompt; `gpu_offload_info`: diagnostyka warstw GPU.
 - `scene_analysis_pl`, `edit_plan_pl`: nowe wyjścia v0.1.5, na końcu listy.
 
-Wersja V0.1.5 generuje sekcje lub JSON (według `output_mode`) w **jednym wywołaniu VLM**. Node rozdziela pola i nie próbuje „poprawiać” rezultatu innym modelem. Przy niepoprawnym JSON zwraca błąd zamiast wprowadzać śmieci do promptu.
+Wersja V0.1.6 generuje sekcje lub JSON (według `output_mode`) w **jednym wywołaniu VLM**. Node rozdziela pola i nie próbuje „poprawiać” rezultatu innym modelem. Przy niepoprawnym JSON zwraca błąd zamiast wprowadzać śmieci do promptu.
 
 ## RAM/VRAM
 
@@ -170,7 +181,7 @@ Przy błędzie node wyświetli lokalną ścieżkę do zapisanych plików. Pliki 
 
 Najważniejsza poprawka dotyczy rzeczywistego błędu z Gemmy 4. W pliku `result.txt` model potrafił wypisać **cały prompt wejściowy** od `User:`, następnie `Assistant:`, blok `[Start thinking]` i urwany wynik tuż przed `[End thinking]`. Stary parser mógł wówczas uznać szablon instrukcji lub szkic rozumowania za finalny prompt. **Teraz nie jest to akceptowane.** Jeśli po usunięciu echa i części thinking nie ma kompletnej odpowiedzi, node kończy zadanie czytelnym błędem, bez przekazywania bezużytecznego promptu do Krea.
 
-**Pola z Test1 przystosowane do jednego obrazu:** nadal używaj `source_prompt` jako oryginalnego kontekstu i `user_goal` jako celu zmian. Opcjonalny `scene_contract` to jawnie opisane niezmienne wymagania (np. „to samo pomieszczenie, jedna postać, laptop w dłoniach”). Nie traktujemy propozycji VLM jako nowych wymagań użytkownika.
+**Pola z Test1 przystosowane do jednego obrazu:** używaj `source_prompt` jako oryginalnej specyfikacji i `user_goal` jako celu zmian. Opcjonalny `scene_contract` to jawnie opisane niezmienne wymagania (np. „to samo pomieszczenie, jedna postać, laptop w dłoniach”). Nie traktujemy propozycji VLM jako nowych wymagań użytkownika.
 
 Dodatkowe opcjonalne pola:
 
@@ -181,6 +192,6 @@ Trzy **nowe wyjścia na końcu** (dotychczasowe cztery zachowują kolejność): 
 
 `gpu_offload_info` wyświetla liczbę warstw wysłanych na GPU tylko wtedy, gdy `llama.cpp` rzeczywiście ją podał w stderr. Jeśli informacja nie występuje, wyświetlany jest brak potwierdzenia, a nie zmyślona liczba. Wciąż można używać `cpu`, `hybrid` i `gpu` oraz osobnego `vision_gpu`. Domyślny `reasoning=off`; jeśli stary node zapisuje `auto`, przestaw ręcznie.
 
-**Instalacja:** podmień kod dodatku na V0.1.3 i uruchom ponownie ComfyUI. Model GGUF, `mmproj` i `llama-cli.exe` zostają tam, gdzie były. Gdy zmieniasz obraz testowy, usuń nieaktualny tekst z `source_prompt` (np. „żabka” podczas analizy fotografii), aby nie wprowadzać modelu w błąd.
+**Instalacja:** podmień kod dodatku na V0.1.6 i uruchom ponownie ComfyUI. Model GGUF, `mmproj` i `llama-cli.exe` zostają tam, gdzie były. Gdy zmieniasz obraz testowy, usuń nieaktualny tekst z `source_prompt` (np. „żabka” podczas analizy fotografii), aby nie wprowadzać modelu w błąd.
 
 **Stan:** testy jednostkowe i symulowane CLI, bez gwarancji poprawności wizji Gemmy / Qwena. Nie instalujemy Ollamy, nie wysyłamy obrazu ani promptu na zewnętrzne API. Logi diagnostyczne mogą zawierać prywatne treści — włączaj je tylko do lokalnego debugowania.

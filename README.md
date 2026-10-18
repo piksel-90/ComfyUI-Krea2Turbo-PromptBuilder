@@ -6,11 +6,19 @@
 
 [Instrukcja po polsku →](README_PL.md)
 
+## v0.1.6 — binding source intent + useful Polish contract report
+
+`source_prompt` now represents the **intended scene specification** (not just loosely provided background). Priority: explicit `scene_contract` > explicit changes in `user_goal` > unchanged `source_prompt` requirements > VLM aesthetic suggestions. If the image contradicts the specification, the VLM is asked to report that discrepancy rather than silently rewrite the intended scene.
+
+With `report_language=pl_en`, **one local VLM inference** now requests a seventh field, `contract_report_pl`, alongside the original six fields. The node's existing `contract_report_pl` output combines the VLM's source/image/prompt comparison with the actual source, goal, scene contract, and deterministic exact-phrase checks. Legacy six-field VLM responses are still parsed but explicitly marked as having no model contract evaluation.
+
+A standalone model verdict `WYNIK_PROMPTU: NIEZGODNY` blocks the produced prompt when requirements exist. This is a **fallible VLM self-assessment**, never independent visual proof; literal checks remain deterministic. A mismatch between source and observed image alone should not block a corrected prompt that still follows the intended source. `contract_ok=true` means *no detected failure*, NOT independently validated accuracy. All 9 output ports and widget indices are unchanged. For new bilingual report generation, try `reasoning=off`, `plain_sections`, and `max_tokens=1800–2400` (saved settings are not rewritten).
+
 ## v0.1.5 — One local model, bilingual outputs, compact UI
 
 **Default `report_language=pl_en`:** one `llama-cli` process returns the original four English response fields PLUS `analysis_pl` and `edit_plan_pl`, in a single generation. `plain_sections` requires a final `[END]` marker to prevent forwarding truncated reports. `en_only` falls back to legacy response format. No second model or translation API is invoked.
 
-Outputs 0–6 are unchanged, with indices 7 `scene_analysis_pl` and 8 `edit_plan_pl` appended. `contract_report_pl` is an exact-phrase diagnostic, **not** the Polish scene report. The interface now optionally offers `⚙ Settings panel` (`Basic`, `Advanced`, `Diagnostics`, `All`) through `web/compact.js`. Widget values are preserved when hidden; on unsupported frontends the native full node still functions. Choose Advanced/All for `llama_cli_path`.
+Outputs 0–6 are unchanged, with indices 7 `scene_analysis_pl` and 8 `edit_plan_pl` appended. `contract_report_pl` is a requirements-comparison and exact-phrase diagnostic, **not** the Polish scene report. The interface now optionally offers `⚙ Settings panel` (`Basic`, `Advanced`, `Diagnostics`, `All`) through `web/compact.js`. Widget values are preserved when hidden; on unsupported frontends the native full node still functions. Choose Advanced/All for `llama_cli_path`.
 
 On Windows ComfyUI portable keep the existing GGUF, matching mmproj and `llama-cli.exe` where they are. New installs may need to set `llama_cli_path` via Advanced. The new default `max_tokens` is 1600 for more room for both languages; saved workflows keep their existing values. An inadequate output budget causes a deliberate error rather than silently returning an incomplete PL report. Tested with mocks and Python/JS unit tests, **not** validated against actual Gemma 4/Qwen on your RTX 4070.
 

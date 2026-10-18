@@ -14,7 +14,7 @@ import threading
 import time
 from uuid import uuid4
 
-from .prompting import SCHEMA, SCHEMA_BILINGUAL, REPORT_LANGUAGES, parse_result
+from .prompting import SCHEMA, SCHEMA_BILINGUAL_CONTRACT, REPORT_LANGUAGES, parse_result
 
 LOG = logging.getLogger("ComfyUI-KreaPromptBuilder")
 _SEMAPHORE = threading.Lock()
@@ -159,7 +159,7 @@ def run_once(
             base = Path(tmp)
             result_path = base / "result.txt"
             schema_path = base / "schema.json"
-            schema_path.write_text(json.dumps(SCHEMA_BILINGUAL if report_language == "pl_en" else SCHEMA), encoding="utf-8")
+            schema_path.write_text(json.dumps(SCHEMA_BILINGUAL_CONTRACT if report_language == "pl_en" else SCHEMA), encoding="utf-8")
             cmd = make_command(executable, model, mmproj, image, schema_path, result_path,
                                instruction, gpu_layers, context_size, max_tokens, batch_size,
                                projector_gpu, execution_device, output_mode, reasoning)

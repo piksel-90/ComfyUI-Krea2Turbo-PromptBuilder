@@ -30,18 +30,30 @@ SCHEMA_BILINGUAL = {
     "additionalProperties": False,
 }
 
+# New report is optional when parsing older llama.cpp output, keeping v0.1.4/15
+# transcripts readable. New prompts ask for it in the same VLM invocation.
+SCHEMA_BILINGUAL_CONTRACT = {
+    "type": "object",
+    "properties": {**SCHEMA_BILINGUAL["properties"],
+                   "contract_report_pl": {"type": "string"}},
+    "required": [*SCHEMA_BILINGUAL["required"], "contract_report_pl"],
+    "additionalProperties": False,
+}
+
 REPORT_LANGUAGES = ("pl_en", "en_only")
 _BILINGUAL_LAYOUT = ("ANALYSIS_EN", "KEEP_EN", "IMPROVE_EN", "PROMPT_EN_US", "ANALYSIS_PL", "EDIT_PLAN_PL", "END")
+_BILINGUAL_LAYOUT_CONTRACT = ("ANALYSIS_EN", "KEEP_EN", "IMPROVE_EN", "PROMPT_EN_US", "ANALYSIS_PL", "EDIT_PLAN_PL", "CONTRACT_REPORT_PL", "END")
 _BILINGUAL_KEYS = {
     "ANALYSIS_EN": "analysis_en", "KEEP_EN": "keep", "IMPROVE_EN": "improve",
     "PROMPT_EN_US": "prompt_en_us", "ANALYSIS_PL": "analysis_pl", "EDIT_PLAN_PL": "edit_plan_pl",
+    "CONTRACT_REPORT_PL": "contract_report_pl",
 }
 # llama.cpp / Gemma sometimes uses NAME: body instead of the requested [NAME]
 # headings. Parse both forms, allowing content after a colon on the same line.
 # Spaces/tabs (not \s) keep the match anchored to one physical line.
 _BILINGUAL_SECTION = re.compile(
-    r"(?mi)^[ \t]*(?:\[[ \t]*(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|END)[ \t]*\]"
-    r"|(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL):)"
+    r"(?mi)^[ \t]*(?:\[[ \t]*(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*\]"
+    r"|(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL):)"
     r"[ \t]*(?P<inline>[^\r\n]*)$"
 )
 
@@ -79,28 +91,37 @@ def build_instruction(mode: str, goal: str, original: str,
     if report_language not in REPORT_LANGUAGES:
         raise ValueError(f"Unknown report language: {report_language}")
     mode_rules = {
-        "faithful": "Describe the actual visible image faithfully; do not add or alter scene elements.",
-        "improve": "Preserve the scene and successful visible elements; propose ONLY minimal corrections to specific visible flaws.",
+        "faithful": "Describe visible observations faithfully. In the final prompt preserve binding source/contract requirements; explicitly report any conflict with the actual image.",
+        "improve": "Preserve the source-specified scene and successful visible elements; propose ONLY minimal corrections; report disagreement with the input image.",
         "creative": "Reinterpret artistic treatment while preserving explicitly locked scene facts and the user's goal.",
     }
     if report_language == "pl_en" and output_mode == "plain_sections":
         format_rule = (
-            "Return ONLY seven plain-text labels on separate lines, in this exact order: "
+            "Return ONLY eight plain-text labels in this exact order: "
             "[ANALYSIS_EN], [KEEP_EN], [IMPROVE_EN], [PROMPT_EN_US], "
-            "[ANALYSIS_PL], [EDIT_PLAN_PL], [END].\n"
-            "Write image-specific content between each pair of labels. "
-            "The labels themselves must occupy separate lines.\n"
-            "ANALYSIS_EN: factual description in American English, identify uncertainty.\n"
-            "KEEP_EN: visibly successful elements to preserve, in English.\n"
-            "IMPROVE_EN: only necessary changes, in English; say none when appropriate.\n"
-            "PROMPT_EN_US: a single usable standalone American-English generation prompt, "
-            "without meta-instructions, speculation or extra titles.\n"
-            "ANALYSIS_PL: detailed natural Polish account of the visible scene, positions, "
-            "actions, style, lighting and uncertainty; do not invent facts.\n"
-            "EDIT_PLAN_PL: detailed Polish explanation with headings ZACHOWAĆ and ZMIENIĆ, "
-            "each justified by the visible image and user goal.\n"
-            "[END] must appear alone after the Polish plan; never cut off the answer. "
-            "Do not copy these definitions into the answer."
+            "[ANALYSIS_PL], [EDIT_PLAN_PL], [CONTRACT_REPORT_PL], [END].\n"
+            "Write complete image-specific content after each heading; no placeholders. "
+            "Labels should be on separate lines, with content underneath.\n"
+            "ANALYSIS_EN: factual image observations and uncertainty (English).\n"
+            "KEEP_EN: scene elements to preserve (English).\n"
+            "IMPROVE_EN: minimal changes (English), or None.\n"
+            "PROMPT_EN_US: a complete standalone English generation prompt, NO commentary.\n"
+            "ANALYSIS_PL: image analysis in Polish, distinguishing facts from guesses.\n"
+            "EDIT_PLAN_PL: Polish KEEP/CHANGE plan with ZACHOWAĆ and ZMIENIĆ.\n"
+            "CONTRACT_REPORT_PL: Polish source-vs-image-vs-final-prompt comparison. "
+            "Use headings ZAŁOŻENIA ŹRÓDŁOWE, ZGODNOŚĆ OBRAZU, "
+            "ZGODNOŚĆ PROMPTU, ROZBIEŻNOŚCI, UZASADNIENIE. "
+            "Under ZGODNOŚĆ PROMPTU include a SINGLE separate line: "
+            "WYNIK_PROMPTU: ZGODNY or WYNIK_PROMPTU: NIEZGODNY or "
+            "WYNIK_PROMPTU: NIEPEWNY or WYNIK_PROMPTU: BRAK_ZAŁOŻEŃ. "
+            "NIEZGODNY means the NEW prompt contradicts an explicit, still-binding "
+            "source/contract requirement; image not meeting the source is NOT by itself "
+            "a reason to mark the NEW prompt NIEZGODNY. "
+            "Give specific examples grounded in provided text and observed image. "
+            "If no source requirements exist, explicitly say so; do not claim independent validation. "
+            "Keep CONTRACT_REPORT_PL concise (roughly 80-140 Polish words).\n"
+            "[END] alone after the Polish contract report. "
+            "Do not echo these formatting instructions."
         )
     elif output_mode == "plain_sections":
         format_rule = (
@@ -113,10 +134,10 @@ def build_instruction(mode: str, goal: str, original: str,
     else:
         format_rule = (
             "Output exactly one JSON object with "
-            + ("six" if report_language == "pl_en" else "four") + " STRING fields: "
+            + ("seven" if report_language == "pl_en" else "four") + " STRING fields: "
             "analysis_en, keep, improve, prompt_en_us"
-            + (", analysis_pl, edit_plan_pl" if report_language == "pl_en" else "")
-            + ". analysis_pl and edit_plan_pl (ZACHOWAĆ / ZMIENIĆ) must be in Polish, "
+            + (", analysis_pl, edit_plan_pl, contract_report_pl" if report_language == "pl_en" else "")
+            + ". analysis_pl, edit_plan_pl (ZACHOWAĆ / ZMIENIĆ), and contract_report_pl must be in Polish. "
               "other fields in English. No markdown or commentary."
         )
     return (
@@ -126,11 +147,22 @@ def build_instruction(mode: str, goal: str, original: str,
         "If a detail is uncertain, say so in ANALYSIS, not as a fact in the final prompt.\n"
         "Keep scene location, subjects, pose, relationships, original text and composition unless a user instruction explicitly permits changing them.\n"
         "Aesthetic preference does NOT override user requirements. Avoid unsupported changes such as new backgrounds or props.\n"
+        "REQUIREMENT PRIORITY: (1) explicit SCENE CONTRACT, (2) explicit changes requested in USER GOAL, "
+        "(3) unchanged requirements from ORIGINAL PROMPT, (4) aesthetic suggestions.\n"
+        "ORIGINAL PROMPT is the intended source specification, NOT just inspiration. "
+        "Preserve its specified subjects, scene setting, interactions, text, objects, and visual style "
+        "unless the higher-priority user goal or scene contract explicitly authorizes a change. "
+        "Do not silently replace or omit a source requirement. Understand Polish or English source text "
+        "semantically, but generate PROMPT_EN_US in English while preserving literal in-image lettering.\n"
+        "Original requirements are NOT automatically verified facts about the supplied IMAGE: "
+        "when the source and image differ, explicitly report the mismatch in CONTRACT_REPORT_PL, "
+        "then draft PROMPT_EN_US preserving the still-binding source requirements. "
+        "Never claim to have independently certified visual compliance.\n"
         "Write English fields in American English (en-US); Polish fields in Polish. Preserve any text literally visible in the image, including non-English lettering.\n"
         "Do not refer to the reference image, model, rubric, or instructions in the final prompt.\n"
         f"{format_rule}\n"
         f"MODE: {mode_rules[mode]}\n"
-        "ORIGINAL PROMPT (context, not automatically a verified fact):\n"
+        "ORIGINAL PROMPT (binding intended requirements, not automatically a verified fact about the image):\n"
         f"{original.strip()[:6000] or '[none]'}\n"
         "USER GOAL (can request changes, may be Polish):\n"
         f"{goal.strip()[:3000] or '[none]'}\n"
@@ -185,6 +217,9 @@ def _normalize(data: object, require_polish: bool = False) -> dict[str, str] | N
             return None
     if not all(fields.values()) or len(fields["prompt_en_us"]) > 12_000:
         return None
+    optional_report = data.get("contract_report_pl")
+    if require_polish and isinstance(optional_report, str) and optional_report.strip():
+        fields["contract_report_pl"] = optional_report.strip()
     # Reject instruction echo and label boilerplate posing as model analysis.
     for value in fields.values():
         lower = value.casefold()
@@ -221,37 +256,30 @@ def _parse_sections(text: str) -> dict[str, str] | None:
 
 
 def _parse_bilingual_sections(text: str) -> dict[str, str] | None:
-    """Find the last fully finished bilingual response.
+    """Accept new 7-field report and legacy 6-field report, both with final END.
 
-    Accept bracket headers ([ANALYSIS_EN]) and Gemma-style colon headers
-    (ANALYSIS_EN: ...), including mixed variants and content on a header line.
-    [END] must be a standalone final marker; instructions, drafts, and
-    incomplete output must never be forwarded as a production prompt.
+    Never mistake the prompt echo or an unfinished final response for a result.
     """
     matches = list(_BILINGUAL_SECTION.finditer(text))
-    candidates: list[dict[str, str]] = []
-    expected = _BILINGUAL_LAYOUT
-    for i in range(len(matches) - len(expected) + 1):
-        group = matches[i:i + len(expected)]
-        labels = tuple((m.group(1) or m.group(2)).upper() for m in group)
-        if labels != expected:
-            continue
-        # END cannot contain data, and this complete answer must terminate the
-        # model response (except harmless whitespace). This prevents accepting
-        # an earlier draft when the model continued generating an unfinished one.
-        if group[-1].group('inline').strip() or text[group[-1].end():].strip():
-            continue
-        fields: dict[str, str] = {}
-        for j, label in enumerate(labels[:-1]):
-            header = group[j]
-            inline = header.group('inline').strip()
-            remainder = text[header.end():group[j + 1].start()].strip()
-            value = (inline + ('\n' if inline and remainder else '') + remainder).strip()
-            fields[_BILINGUAL_KEYS[label]] = value
-        parsed = _normalize(fields, require_polish=True)
-        if parsed:
-            candidates.append(parsed)
-    return candidates[-1] if candidates else None
+    candidates: list[tuple[int, dict[str, str]]] = []
+    for expected in (_BILINGUAL_LAYOUT_CONTRACT, _BILINGUAL_LAYOUT):
+        for i in range(len(matches) - len(expected) + 1):
+            group = matches[i:i + len(expected)]
+            labels = tuple((m.group(1) or m.group(2)).upper() for m in group)
+            if labels != expected:
+                continue
+            if group[-1].group("inline").strip() or text[group[-1].end():].strip():
+                continue
+            fields: dict[str, str] = {}
+            for j, label in enumerate(labels[:-1]):
+                header = group[j]
+                inline = header.group("inline").strip()
+                remainder = text[header.end():group[j + 1].start()].strip()
+                fields[_BILINGUAL_KEYS[label]] = (inline + ("\n" if inline and remainder else "") + remainder).strip()
+            normalized = _normalize(fields, require_polish=True)
+            if normalized:
+                candidates.append((group[0].start(), normalized))
+    return max(candidates, key=lambda x: x[0])[1] if candidates else None
 
 
 def parse_result(raw: str, require_polish: bool = False) -> dict[str, str]:
