@@ -1,3 +1,7 @@
+## v0.1.7 — Gemma terminator & contract verdict compatibility
+
+The bilingual/contract `plain_sections` parser now accepts the final standalone `END` **or** `[END]`, alongside bracketed and colon-style field headings. A valid response must still contain all required nonempty sections with **no generated material after the terminal line**; prompt echoes and unfinished thinking remain rejected. The model's standalone contract verdict also accepts a trailing period (for example `WYNIK_PROMPTU: ZGODNY.` / `NIEZGODNY.`). These are parsing changes, not improvements to visual accuracy. Existing nine ports and all widgets remain in place; no new model, service or inference is added. Regression tests use synthetic content; the user's diagnostic file was exercised locally and omitted from the release.
+
 # ComfyUI — Krea 2 Turbo Prompt Builder
 
 **v0.1.3 (prototype / alpha)** · One generated image → one improved **en-US** prompt, with an evidence-based scene analysis and keep/change plan.

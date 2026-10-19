@@ -1,3 +1,7 @@
+# V0.1.7 — poprawka końca odpowiedzi Gemmy
+
+Gemma czasami kończy odpowiedź samodzielną linią `END` zamiast `[END]`. Od V0.1.7 parser obsługuje oba warianty oraz nagłówki `ANALYSIS_EN:` / `[ANALYSIS_EN]`. Dodatkowo akceptuje kropkę po werdykcie `WYNIK_PROMPTU: ZGODNY.` lub `NIEZGODNY.` — negatywny werdykt nadal może blokować prompt. **Nie** akceptuje niedokończonych odpowiedzi, tekstu dopisanego po zakończeniu, echa instrukcji ani samego thinking. Naprawa dotyczy formatu: nie dowodzi lepszej jakości analizy wizualnej. Nie zmieniamy 9 wyjść, widgetów, modeli ani ustawień CUDA. Prawdziwy `result.txt` użyto tylko do lokalnego testu; nie jest częścią paczki.
+
 # V0.1.6 — source_prompt naprawdę uczestniczy w kontroli zgodności
 
 - `source_prompt` traktujemy jako **zamierzoną specyfikację sceny**, a nie tylko inspirację. Priorytety: `scene_contract` → jawna zmiana z `user_goal` → pozostałe wymagania `source_prompt` → sugestie stylistyczne modelu.

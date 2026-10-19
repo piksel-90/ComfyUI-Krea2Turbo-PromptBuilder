@@ -57,7 +57,8 @@ def evaluate_text_contract(prompt_en_us: str, required: str = "", forbidden: str
 # conservative block; absence of a verdict never means verified compliance.
 _SELF_VERDICT = re.compile(
     r"(?im)^[ \t]*WYNIK_PROMPTU\s*:\s*"
-    r"(ZGODNY|NIEZGODNY|NIEPEWNY|BRAK_ZAŁOŻEŃ|BRAK_ZALOZEN)[ \t]*$"
+    r"(ZGODNY|NIEZGODNY|NIEPEWNY|BRAK_ZAŁOŻEŃ|BRAK_ZALOZEN)"
+    r"[ \t]*[.。]?[ \t]*$"
 )
 
 
@@ -93,7 +94,7 @@ def evaluate_scene_contract(
     def brief(text: str, limit: int = 650) -> str:
         return (text[:limit].rstrip() + " … [skrócono]") if len(text) > limit else text
 
-    parts = ["RAPORT ZGODNOŚCI SCENY — V0.1.6"]
+    parts = ["RAPORT ZGODNOŚCI SCENY — V0.1.7"]
     parts.extend((
         "ZAŁOŻENIA ŹRÓDŁOWE: " + (brief(source_prompt) if source_prompt else "Nie podano."),
         "CEL UŻYTKOWNIKA: " + (brief(user_goal) if user_goal else "Nie podano."),

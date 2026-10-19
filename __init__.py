@@ -1,4 +1,4 @@
-"""ComfyUI Krea 2 Turbo Prompt Builder v0.1.5"""
+"""ComfyUI Krea 2 Turbo Prompt Builder v0.1.7"""
 from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
 __all__ = ("NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY")

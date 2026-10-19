@@ -1,3 +1,12 @@
+## 0.1.7 — 2026-10-19
+
+- Fix Gemma/llama.cpp bilingual responses ending in a standalone `END` instead of `[END]`, while still accepting bracketed endings and both `[HEADER]` / `HEADER:` fields.
+- Preserve strict end-of-response checking: missing terminators, trailing generated drafts, echo-only output, unfinished reasoning or incomplete fields are rejected rather than used as a Krea prompt.
+- Recognize model contract verdicts with a harmless trailing full stop, e.g. `WYNIK_PROMPTU: ZGODNY.` or `NIEZGODNY.`; negatives still block when applicable.
+- Regression tests cover anonymized variants of the failing transcript; the user's original `result.txt` was tested locally and is NOT bundled or committed.
+- No changes to model paths, GPU settings, execution mode, nine output ports or widget order; no additional inference passes.
+- Automated tests and parser test against the supplied transcript only. RTX 4070 end-to-end inference remains user-side validation.
+
 ## 0.1.6 — 2026-10-19
 
 - Treat `source_prompt` as the binding intended scene specification (except explicit higher-priority changes), not mere context; separate *observed image* from *desired output*.

@@ -48,12 +48,13 @@ _BILINGUAL_KEYS = {
     "PROMPT_EN_US": "prompt_en_us", "ANALYSIS_PL": "analysis_pl", "EDIT_PLAN_PL": "edit_plan_pl",
     "CONTRACT_REPORT_PL": "contract_report_pl",
 }
-# llama.cpp / Gemma sometimes uses NAME: body instead of the requested [NAME]
-# headings. Parse both forms, allowing content after a colon on the same line.
-# Spaces/tabs (not \s) keep the match anchored to one physical line.
+# llama.cpp / Gemma occasionally replaces [HEADER] with HEADER: and [END]
+# with a bare END line. Match only physical line starts. Bare END is considered
+# a terminator ONLY when it is the last header and no text follows it.
 _BILINGUAL_SECTION = re.compile(
-    r"(?mi)^[ \t]*(?:\[[ \t]*(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*\]"
-    r"|(ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL):)"
+    r"(?mi)^[ \t]*(?:\[[ \t]*(?P<bracket>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*\]"
+    r"|(?P<colon>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL):"
+    r"|(?P<bare_end>END))"
     r"[ \t]*(?P<inline>[^\r\n]*)$"
 )
 
@@ -265,7 +266,7 @@ def _parse_bilingual_sections(text: str) -> dict[str, str] | None:
     for expected in (_BILINGUAL_LAYOUT_CONTRACT, _BILINGUAL_LAYOUT):
         for i in range(len(matches) - len(expected) + 1):
             group = matches[i:i + len(expected)]
-            labels = tuple((m.group(1) or m.group(2)).upper() for m in group)
+            labels = tuple((m.group("bracket") or m.group("colon") or m.group("bare_end")).upper() for m in group)
             if labels != expected:
                 continue
             if group[-1].group("inline").strip() or text[group[-1].end():].strip():
