@@ -1,12 +1,13 @@
 // Optional ComfyUI canvas UI enhancement. No external requests, dependencies, or model changes.
 import { app } from "../../scripts/app.js";
 
-const NODE_NAME = "Krea2TurboPromptBuilderV01";
+const NODE_NAMES = new Set(["Krea2TurboPromptBuilderV01", "Krea2TurboPromptBuilderV018"]);
 const PANEL_NAME = "⚙ Settings panel";
 const PANELS = ["Basic", "Advanced", "Diagnostics", "All"];
-const BASIC = new Set([
-  "model_gguf", "mode", "user_goal", "source_prompt", "report_language",
-]);
+// These three fields are visible in Basic, Advanced, Diagnostics and All.
+// Legacy V01 retains its original two field names for saved-workflow safety.
+const ALWAYS = new Set(["original_prompt", "target", "extra_instruction", "source_prompt", "user_goal"]);
+const BASIC = new Set(["model_gguf", "mode"]);
 const ADVANCED = new Set([
   "mmproj_gguf", "llama_cli_path", "image_index", "max_image_side", "gpu_layers",
   "vision_gpu", "context_size", "max_tokens", "batch_size", "timeout_seconds",
@@ -56,7 +57,7 @@ function refresh(node) {
       continue;
     }
     const name = widget.name;
-    const visible = panel === "All" || BASIC.has(name) ||
+    const visible = panel === "All" || ALWAYS.has(name) || BASIC.has(name) ||
       (panel === "Advanced" && ADVANCED.has(name)) ||
       (panel === "Diagnostics" && DIAGNOSTICS.has(name)) ||
       (!ADVANCED.has(name) && !DIAGNOSTICS.has(name) && !BASIC.has(name));
@@ -91,7 +92,7 @@ function initialize(node) {
 app.registerExtension({
   name: "krea.prompt_builder.compact_ui",
   beforeRegisterNodeDef(nodeType, nodeData) {
-    if (nodeData.name !== NODE_NAME) return;
+    if (!NODE_NAMES.has(nodeData.name)) return;
     const origCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function (...args) {
       const result = origCreated?.apply(this, args);

@@ -1,3 +1,16 @@
+# V0.1.8 — streamlined node, direct extra_instruction
+
+**New node type:** `Krea2TurboPromptBuilderV018`, shown as `Krea 2 Turbo | Prompt Builder v0.1.8`.
+
+- Three multiline inputs **`original_prompt`**, **`target`**, **`extra_instruction`** remain visible in every Basic / Advanced / Diagnostics / All panel and in all faithful / improve / creative modes.
+- `original_prompt` replaces `source_prompt` as the intended source specification. `target` replaces `user_goal` as the desired outcome. `extra_instruction` is a separate direct command to the local VLM (modeled on Test1's EXTRA field), subordinate to `scene_contract`.
+- No `report_language` widget: one local llama.cpp inference always produces EN and PL. No `gpu_offload_info` output: the offload detail remains in local logs / optional diagnostics.
+- New output order: `prompt_en_us`, `scene_analysis_en`, `edit_plan_en`, `image`, `contract_report_pl`, `contract_ok`, `scene_analysis_pl`, `edit_plan_pl` (8 outputs).
+- **Compatibility:** ComfyUI saves widget values by position and output connections by index. Therefore the original `Krea2TurboPromptBuilderV01` is retained as a separate legacy node to load existing workflows without corrupting links. Add V0.1.8 and reconnect deliberately; do not assume the two schemas are interchangeable.
+- The local image/text data are not sent to remote inference services. Model weights and dependencies are still installed separately.
+
+---
+
 ## v0.1.7 — Gemma terminator & contract verdict compatibility
 
 The bilingual/contract `plain_sections` parser now accepts the final standalone `END` **or** `[END]`, alongside bracketed and colon-style field headings. A valid response must still contain all required nonempty sections with **no generated material after the terminal line**; prompt echoes and unfinished thinking remain rejected. The model's standalone contract verdict also accepts a trailing period (for example `WYNIK_PROMPTU: ZGODNY.` / `NIEZGODNY.`). These are parsing changes, not improvements to visual accuracy. Existing nine ports and all widgets remain in place; no new model, service or inference is added. Regression tests use synthetic content; the user's diagnostic file was exercised locally and omitted from the release.

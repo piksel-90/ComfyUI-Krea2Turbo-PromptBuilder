@@ -67,6 +67,7 @@ def evaluate_scene_contract(
     *,
     source_prompt: str = "",
     user_goal: str = "",
+    extra_instruction: str = "",
     scene_contract: str = "",
     analysis_pl: str = "",
     analysis_en: str = "",
@@ -83,9 +84,10 @@ def evaluate_scene_contract(
     literal = evaluate_text_contract(prompt_en_us, required_exact_phrases, forbidden_exact_phrases)
     source_prompt = (source_prompt or "").strip()
     user_goal = (user_goal or "").strip()
+    extra_instruction = (extra_instruction or "").strip()
     scene_contract = (scene_contract or "").strip()
     report = (model_report_pl or "").strip()
-    has_requirements = bool(source_prompt or user_goal or scene_contract)
+    has_requirements = bool(source_prompt or user_goal or extra_instruction or scene_contract)
     verdicts = _SELF_VERDICT.findall(report)
     verdict = verdicts[-1].upper() if verdicts else None
     self_report_blocks = bool(has_requirements and verdict == "NIEZGODNY")
@@ -94,10 +96,11 @@ def evaluate_scene_contract(
     def brief(text: str, limit: int = 650) -> str:
         return (text[:limit].rstrip() + " … [skrócono]") if len(text) > limit else text
 
-    parts = ["RAPORT ZGODNOŚCI SCENY — V0.1.7"]
+    parts = ["RAPORT ZGODNOŚCI SCENY — V0.1.8"]
     parts.extend((
         "ZAŁOŻENIA ŹRÓDŁOWE: " + (brief(source_prompt) if source_prompt else "Nie podano."),
         "CEL UŻYTKOWNIKA: " + (brief(user_goal) if user_goal else "Nie podano."),
+        "INSTRUKCJA DODATKOWA: " + (brief(extra_instruction) if extra_instruction else "Nie podano."),
         "NADRZĘDNY KONTRAKT SCENY: " + (brief(scene_contract) if scene_contract else "Nie podano."),
     ))
     if report:

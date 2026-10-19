@@ -28,6 +28,8 @@ ANY = AnyType("*")
 
 
 class KreaPromptBuilder:
+    """Legacy V01 node schema retained to load existing serialized ComfyUI graphs."""
+    CATEGORY = "Krea/Legacy"
     @classmethod
     def INPUT_TYPES(cls):
         models, mmprojs, _ = catalog(MODEL_ROOT, folder_paths)
@@ -82,13 +84,14 @@ class KreaPromptBuilder:
         commit_headroom_gib, after_purge=None, model_path_override="", mmproj_path_override="",
         execution_device="hybrid", output_mode="plain_sections", reasoning="off", save_diagnostics=False,
         scene_contract="", required_exact_phrases="", forbidden_exact_phrases="",
-        report_language="pl_en",
+        report_language="pl_en", extra_instruction="",
     ):
         _, _, known_paths = catalog(MODEL_ROOT, folder_paths)
         model = select_gguf(model_gguf, known_paths, model_path_override)
         mmproj = resolve_projector(mmproj_gguf, model, known_paths, mmproj_path_override)
         executable = find_executable(llama_cli_path)
-        instruction = build_instruction(mode, user_goal, source_prompt, output_mode, scene_contract, report_language)
+        instruction = build_instruction(mode, user_goal, source_prompt, output_mode, scene_contract, report_language,
+                                        extra_instruction=extra_instruction)
         if save_diagnostics:
             output_dir = (Path(folder_paths.get_output_directory()) if hasattr(folder_paths, "get_output_directory")
                           else MODEL_ROOT.parent / "output")
@@ -113,6 +116,7 @@ class KreaPromptBuilder:
         plan = f"KEEP:\n{result['keep']}\n\nIMPROVE:\n{result['improve']}"
         status = evaluate_scene_contract(
             result["prompt_en_us"], source_prompt=source_prompt, user_goal=user_goal,
+            extra_instruction=extra_instruction,
             scene_contract=scene_contract, analysis_pl=result.get("analysis_pl", ""),
             analysis_en=result.get("analysis_en", ""),
             model_report_pl=result.get("contract_report_pl", ""),
@@ -127,5 +131,69 @@ class KreaPromptBuilder:
                 result.get("analysis_pl", ""), result.get("edit_plan_pl", ""))
 
 
-NODE_CLASS_MAPPINGS = {"Krea2TurboPromptBuilderV01": KreaPromptBuilder}
-NODE_DISPLAY_NAME_MAPPINGS = {"Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.7"}
+class KreaPromptBuilderV018(KreaPromptBuilder):
+    """Clean V0.1.8 interface. V01 stays registered to protect saved workflows.
+
+    ComfyUI stores widgets_values positionally and links outputs by index. Removing
+    a V01 widget/output in place could silently corrupt existing graphs. The new
+    node type intentionally has its own schema; no automatic unsafe migration.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        old = super().INPUT_TYPES()
+        required = {}
+        for name, spec in old["required"].items():
+            if name == "user_goal":
+                required["original_prompt"] = ("STRING", {"default": "", "multiline": True,
+                    "tooltip": "Original intended image specification. Leave empty for an image-only test."})
+                required["target"] = ("STRING", {"default": "", "multiline": True,
+                    "tooltip": "Desired outcome or requested scene changes (Polish or English)."})
+                required["extra_instruction"] = ("STRING", {"default": "", "multiline": True,
+                    "tooltip": "Direct command to Gemma/Qwen: what to inspect, preserve or change. Takes precedence over original_prompt, not scene_contract."})
+            elif name != "source_prompt":
+                required[name] = spec
+        optional = {name: spec for name, spec in old["optional"].items() if name != "report_language"}
+        return {"required": required, "optional": optional}
+
+    # New node has no unused GPU diagnostic output. Legacy output indexes are
+    # retained in KreaPromptBuilder (V01) for previously saved workflows.
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "IMAGE", "STRING", "BOOLEAN", "STRING", "STRING")
+    RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image",
+                    "contract_report_pl", "contract_ok", "scene_analysis_pl", "edit_plan_pl")
+    CATEGORY = "Krea/Prompt Builder"
+    DESCRIPTION = "Single local VLM; original_prompt + target + direct extra_instruction; EN prompt and PL reports."
+
+    def build(self, image, model_gguf, mmproj_gguf, llama_cli_path, mode,
+              original_prompt, target, extra_instruction, image_index,
+              max_image_side, gpu_layers, vision_gpu, context_size, max_tokens,
+              batch_size, timeout_seconds, commit_headroom_gib,
+              execution_device="hybrid", output_mode="plain_sections", reasoning="off",
+              save_diagnostics=False, after_purge=None, model_path_override="",
+              mmproj_path_override="", scene_contract="", required_exact_phrases="",
+              forbidden_exact_phrases=""):
+        legacy = super().build(
+            image=image, model_gguf=model_gguf, mmproj_gguf=mmproj_gguf,
+            llama_cli_path=llama_cli_path, mode=mode, user_goal=target,
+            source_prompt=original_prompt, extra_instruction=extra_instruction,
+            image_index=image_index, max_image_side=max_image_side,
+            gpu_layers=gpu_layers, vision_gpu=vision_gpu, context_size=context_size,
+            max_tokens=max_tokens, batch_size=batch_size, timeout_seconds=timeout_seconds,
+            commit_headroom_gib=commit_headroom_gib, execution_device=execution_device,
+            output_mode=output_mode, reasoning=reasoning, save_diagnostics=save_diagnostics,
+            after_purge=after_purge, model_path_override=model_path_override,
+            mmproj_path_override=mmproj_path_override, scene_contract=scene_contract,
+            required_exact_phrases=required_exact_phrases,
+            forbidden_exact_phrases=forbidden_exact_phrases, report_language="pl_en",
+        )
+        return legacy[:6] + legacy[7:]
+
+
+NODE_CLASS_MAPPINGS = {
+    "Krea2TurboPromptBuilderV01": KreaPromptBuilder,
+    "Krea2TurboPromptBuilderV018": KreaPromptBuilderV018,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.7 (legacy)",
+    "Krea2TurboPromptBuilderV018": "Krea 2 Turbo | Prompt Builder v0.1.8",
+}

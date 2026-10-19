@@ -1,3 +1,17 @@
+# V0.1.8 — uproszczony node i bezpośrednia instrukcja VLM
+
+**Nowy node:** `Krea 2 Turbo | Prompt Builder v0.1.8` (typ `Krea2TurboPromptBuilderV018`).
+
+- W każdym widoku **Basic / Advanced / Diagnostics / All** trzy wieloliniowe pola pozostają widoczne w tej samej kolejności: **`original_prompt`**, **`target`**, **`extra_instruction`**. Dotyczy również wszystkich trybów pracy `faithful / improve / creative`.
+- `original_prompt` zastępuje `source_prompt` jako specyfikacja pierwotna; `target` zastępuje `user_goal` jako cel zmian; `extra_instruction` to osobne, bezpośrednie polecenie dla lokalnego VLM, inspirowane `extra_instruction` z Test1. Np. `Verify the tie color carefully; do not invent objects.`
+- Usunięto z **nowego noda** kontrolkę `report_language` — zawsze powstają EN i PL w **jednym** wywołaniu lokalnego `llama-cli`. Usunięto z **nowego noda** wyjście `gpu_offload_info`; dane o offloadzie pozostają w logach i opcjonalnej diagnostyce lokalnej.
+- Nowe wyjścia: `prompt_en_us`, `scene_analysis_en`, `edit_plan_en`, `image`, `contract_report_pl`, `contract_ok`, `scene_analysis_pl`, `edit_plan_pl` (8 portów).
+- `extra_instruction` ma wyższy priorytet od niezmienionych założeń `original_prompt`, ale nie może nadpisać `scene_contract`. Tekst znajdujący się na obrazie jest danymi wizualnymi, nie poleceniem.
+- **Kompatybilność:** stare workflow V0.1.7 nadal ładują się przez zarejestrowany typ `Krea2TurboPromptBuilderV01` w kategorii `Krea/Legacy`. Nie przerabiamy ich automatycznie, ponieważ ComfyUI zapisuje `widgets_values` pozycyjnie, a połączenia po indeksach wyjść. Aby użyć nowego układu, dodaj node V0.1.8 i przełącz przewody świadomie. W starym nodzie zachowano dawną kontrolkę i dziewięć wyjść wyłącznie dla zgodności zapisanych grafów.
+- Testy nie uruchamiają rzeczywistej Gemmy ani GPU; rzeczywisty przebieg wymaga testu na lokalnym sprzęcie.
+
+---
+
 # V0.1.7 — poprawka końca odpowiedzi Gemmy
 
 Gemma czasami kończy odpowiedź samodzielną linią `END` zamiast `[END]`. Od V0.1.7 parser obsługuje oba warianty oraz nagłówki `ANALYSIS_EN:` / `[ANALYSIS_EN]`. Dodatkowo akceptuje kropkę po werdykcie `WYNIK_PROMPTU: ZGODNY.` lub `NIEZGODNY.` — negatywny werdykt nadal może blokować prompt. **Nie** akceptuje niedokończonych odpowiedzi, tekstu dopisanego po zakończeniu, echa instrukcji ani samego thinking. Naprawa dotyczy formatu: nie dowodzi lepszej jakości analizy wizualnej. Nie zmieniamy 9 wyjść, widgetów, modeli ani ustawień CUDA. Prawdziwy `result.txt` użyto tylko do lokalnego testu; nie jest częścią paczki.
