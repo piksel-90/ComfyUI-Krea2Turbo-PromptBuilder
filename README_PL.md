@@ -1,3 +1,17 @@
+# V0.1.10 — wbudowany Memory Handoff Krea → Gemma
+
+- Nowy node **v0.1.10** ma `memory_handoff=true` domyślnie. Nie wymaga zewnętrznego noda RAM/VRAM Purge.
+- Po zapisaniu wejściowego obrazu do lokalnego pliku tymczasowego Prompt Builder wywołuje wyłącznie oficjalne `comfy.model_management.unload_all_models()`, GC oraz `soft_empty_cache()`. **Nie czyści ręcznie** `current_loaded_models` ani innych rejestrów ComfyUI.
+- Dopiero po tym handoffie sprawdzany jest `commit_headroom_gib`, a następnie uruchamiany jest jednorazowy lokalny `llama-cli`.
+- Node ustawia także flagę ComfyUI `free_memory`. Worker obsługuje ją **po zakończeniu całego bieżącego promptu**, wykonując standardowe `unload_all_models()` + reset execution cache + GC. Cache aktywnego grafu nie jest resetowany w trakcie działania noda.
+- Log pokazuje best-effort pamięć procesu Python (RSS/private na Windows) i VRAM przed/po handoffie; nie zapisuje przez to żadnych promptów ani obrazów.
+- `memory_handoff` dodano na końcu opcjonalnych widgetów, aby nie przesuwać zapisanych wartości V0.1.8/0.1.9. Wewnętrzny typ nadal nazywa się `Krea2TurboPromptBuilderV018`, więc stare workflow nie tracą połączeń.
+- V0.1.7 legacy pozostaje bez automatycznego handoffu i bez zmian portów.
+
+**Uwaga:** handoff celowo rezygnuje z trzymania Krea/enkodera „na następną generację”. Następny przebieg Krea może ładować modele ponownie — to cena za odzyskanie pamięci dla Gemmy na maszynach z ograniczonym RAM/VRAM.
+
+---
+
 # V0.1.9 — Gemma: nagłówki bez nawiasów i brak końcowego END
 
 Poprawka parsera na podstawie rzeczywistego lokalnego `result.txt` (bez dodawania tego prywatnego pliku do repozytorium).

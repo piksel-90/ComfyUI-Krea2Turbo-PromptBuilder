@@ -1,3 +1,11 @@
+## v0.1.10
+
+- Added built-in `memory_handoff` (default on for the modern node): serialize IMAGE first, then official ComfyUI `unload_all_models()`, GC and `soft_empty_cache()`, then commit-headroom check and local VLM launch.
+- Schedules ComfyUI's own `free_memory` queue flag so model + execution cache cleanup occurs only after the current prompt has finished.
+- Added local RAM/VRAM before/after logging without prompt/image content.
+- Never mutates `current_loaded_models` or other ComfyUI model-tracking lists directly.
+- Preserves the existing `Krea2TurboPromptBuilderV018` type ID, output order and legacy v0.1.7 node.
+
 # V0.1.8 (2026-10-19)
 
 **New node type:** `Krea2TurboPromptBuilderV018`, shown as `Krea 2 Turbo | Prompt Builder v0.1.8`.

@@ -12,11 +12,11 @@ const ADVANCED = new Set([
   "mmproj_gguf", "llama_cli_path", "image_index", "max_image_side", "gpu_layers",
   "vision_gpu", "context_size", "max_tokens", "batch_size", "timeout_seconds",
   "execution_device", "output_mode", "reasoning", "model_path_override",
-  "mmproj_path_override",
+  "mmproj_path_override", "memory_handoff",
 ]);
 const DIAGNOSTICS = new Set([
   "save_diagnostics", "commit_headroom_gib", "scene_contract",
-  "required_exact_phrases", "forbidden_exact_phrases",
+  "required_exact_phrases", "forbidden_exact_phrases", "memory_handoff",
 ]);
 
 function setHidden(widget, hidden) {

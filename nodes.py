@@ -9,7 +9,10 @@ import folder_paths
 
 from .krea_prompt_builder.images import save_one_image
 from .krea_prompt_builder.contract import evaluate_scene_contract
-from .krea_prompt_builder.memory import enforce_headroom
+from .krea_prompt_builder.memory import (
+    enforce_headroom, perform_comfy_memory_handoff, schedule_post_prompt_free,
+    format_memory_snapshot,
+)
 from .krea_prompt_builder.models import catalog, select_gguf, resolve_projector
 from .krea_prompt_builder.prompting import build_instruction, MODES, REPORT_LANGUAGES
 from .krea_prompt_builder.runner import find_executable, run_once
@@ -84,7 +87,7 @@ class KreaPromptBuilder:
         commit_headroom_gib, after_purge=None, model_path_override="", mmproj_path_override="",
         execution_device="hybrid", output_mode="plain_sections", reasoning="off", save_diagnostics=False,
         scene_contract="", required_exact_phrases="", forbidden_exact_phrases="",
-        report_language="pl_en", extra_instruction="",
+        report_language="pl_en", extra_instruction="", memory_handoff=False,
     ):
         _, _, known_paths = catalog(MODEL_ROOT, folder_paths)
         model = select_gguf(model_gguf, known_paths, model_path_override)
@@ -98,12 +101,25 @@ class KreaPromptBuilder:
             diagnostics_dir = output_dir / "krea_prompt_builder_diagnostics"
         else:
             diagnostics_dir = None
-        if commit_headroom_gib:
-            LOG.info(enforce_headroom(float(commit_headroom_gib)))
         with tempfile.TemporaryDirectory(prefix="krea_input_") as folder:
             image_path = Path(folder) / "frame.png"
             width, height = save_one_image(image, image_index, max_image_side, image_path)
             LOG.info("Analyzing one image: %s x %s; batch index %s", width, height, image_index)
+
+            if memory_handoff:
+                before, after = perform_comfy_memory_handoff()
+                LOG.info("[Memory Handoff] Before: %s", format_memory_snapshot(before))
+                LOG.info("[Memory Handoff] After:  %s", format_memory_snapshot(after))
+                if schedule_post_prompt_free():
+                    LOG.info("[Memory Handoff] Full model + node-cache cleanup scheduled after current prompt")
+                else:
+                    LOG.warning("[Memory Handoff] Could not schedule post-prompt cache cleanup; pre-VLM unload still completed")
+
+            # Check commit headroom only after ComfyUI had a chance to release
+            # Krea/text-encoder/VAE RAM and VRAM.
+            if commit_headroom_gib:
+                LOG.info(enforce_headroom(float(commit_headroom_gib)))
+
             result = run_once(
                 executable, model, mmproj, image_path, instruction,
                 gpu_layers, context_size, max_tokens, batch_size,
@@ -154,6 +170,11 @@ class KreaPromptBuilderV018(KreaPromptBuilder):
             elif name != "source_prompt":
                 required[name] = spec
         optional = {name: spec for name, spec in old["optional"].items() if name != "report_language"}
+        # Append only: ComfyUI serializes widget values positionally.
+        optional["memory_handoff"] = ("BOOLEAN", {
+            "default": True,
+            "tooltip": "Unload ComfyUI models before local VLM and request full model + node-cache cleanup after the prompt. Replaces external purge nodes.",
+        })
         return {"required": required, "optional": optional}
 
     # New node has no unused GPU diagnostic output. Legacy output indexes are
@@ -162,7 +183,7 @@ class KreaPromptBuilderV018(KreaPromptBuilder):
     RETURN_NAMES = ("prompt_en_us", "scene_analysis_en", "edit_plan_en", "image",
                     "contract_report_pl", "contract_ok", "scene_analysis_pl", "edit_plan_pl")
     CATEGORY = "Krea/Prompt Builder"
-    DESCRIPTION = "Single local VLM; original_prompt + target + direct extra_instruction; EN prompt and PL reports."
+    DESCRIPTION = "Single local VLM with built-in ComfyUI memory handoff; original_prompt + target + direct extra_instruction."
 
     def build(self, image, model_gguf, mmproj_gguf, llama_cli_path, mode,
               original_prompt, target, extra_instruction, image_index,
@@ -171,7 +192,7 @@ class KreaPromptBuilderV018(KreaPromptBuilder):
               execution_device="hybrid", output_mode="plain_sections", reasoning="off",
               save_diagnostics=False, after_purge=None, model_path_override="",
               mmproj_path_override="", scene_contract="", required_exact_phrases="",
-              forbidden_exact_phrases=""):
+              forbidden_exact_phrases="", memory_handoff=True):
         legacy = super().build(
             image=image, model_gguf=model_gguf, mmproj_gguf=mmproj_gguf,
             llama_cli_path=llama_cli_path, mode=mode, user_goal=target,
@@ -185,6 +206,7 @@ class KreaPromptBuilderV018(KreaPromptBuilder):
             mmproj_path_override=mmproj_path_override, scene_contract=scene_contract,
             required_exact_phrases=required_exact_phrases,
             forbidden_exact_phrases=forbidden_exact_phrases, report_language="pl_en",
+            memory_handoff=memory_handoff,
         )
         return legacy[:6] + legacy[7:]
 
@@ -195,5 +217,5 @@ NODE_CLASS_MAPPINGS = {
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.7 (legacy)",
-    "Krea2TurboPromptBuilderV018": "Krea 2 Turbo | Prompt Builder v0.1.9",
+    "Krea2TurboPromptBuilderV018": "Krea 2 Turbo | Prompt Builder v0.1.10",
 }

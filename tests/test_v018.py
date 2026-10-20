@@ -96,6 +96,8 @@ class NodeCompatibilityTests(unittest.TestCase):
                 self.assertNotIn('source_prompt', new_widgets)
                 self.assertNotIn('user_goal', new_widgets)
                 self.assertNotIn('report_language', new_widgets)
+                self.assertEqual(list(new['optional'])[-1], 'memory_handoff')
+                self.assertTrue(new['optional']['memory_handoff'][1]['default'])
                 self.assertNotIn('gpu_offload_info', mod.KreaPromptBuilderV018.RETURN_NAMES)
                 self.assertEqual(mod.KreaPromptBuilderV018.RETURN_NAMES[6:], ('scene_analysis_pl', 'edit_plan_pl'))
                 self.assertEqual(mod.KreaPromptBuilderV018.RETURN_NAMES[:6], mod.KreaPromptBuilder.RETURN_NAMES[:6])
@@ -138,7 +140,7 @@ class NodeCompatibilityTests(unittest.TestCase):
                         image_index=0, max_image_side=384, gpu_layers=16,
                         vision_gpu=False, context_size=4096, max_tokens=1600,
                         batch_size=128, timeout_seconds=30, commit_headroom_gib=0,
-                        execution_device='gpu',
+                        execution_device='gpu', memory_handoff=False,
                     )
                 self.assertEqual(runner.call_count, 1)
                 instruction = runner.call_args.args[4]

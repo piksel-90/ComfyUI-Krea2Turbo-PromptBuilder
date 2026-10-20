@@ -1,3 +1,11 @@
+# V0.1.10 — built-in Krea → VLM memory handoff
+
+The v0.1.10 node enables `memory_handoff` by default. After serializing the input IMAGE to its private temporary file, it uses ComfyUI's official model-unload path plus GC/CUDA cache cleanup before the local `llama-cli` starts. It never clears `current_loaded_models` manually. The commit-headroom guard runs after this handoff. The node also schedules ComfyUI's standard full model + execution-cache cleanup for the end of the current prompt, so the active graph is never reset mid-execution.
+
+This trades Krea model reuse speed for RAM/VRAM headroom. The option is appended to the existing v0.1.8/v0.1.9 node schema to preserve serialized widget positions. No image or prompt is sent to external inference services.
+
+---
+
 # V0.1.8 — streamlined node, direct extra_instruction
 
 **New node type:** `Krea2TurboPromptBuilderV018`, shown as `Krea 2 Turbo | Prompt Builder v0.1.8`.
