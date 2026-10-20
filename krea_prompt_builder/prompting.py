@@ -48,14 +48,19 @@ _BILINGUAL_KEYS = {
     "PROMPT_EN_US": "prompt_en_us", "ANALYSIS_PL": "analysis_pl", "EDIT_PLAN_PL": "edit_plan_pl",
     "CONTRACT_REPORT_PL": "contract_report_pl",
 }
-# llama.cpp / Gemma occasionally replaces [HEADER] with HEADER: and [END]
-# with a bare END line. Match only physical line starts. Bare END is considered
-# a terminator ONLY when it is the last header and no text follows it.
+# Gemma may emit [HEADER], HEADER:, or a bare HEADER line.
+# Bare headings must occupy the ENTIRE physical line; inline text is only
+# allowed for bracket/colon headings. Keep END optional ONLY for a complete
+# seven-field response with a final explicit contract verdict.
 _BILINGUAL_SECTION = re.compile(
-    r"(?mi)^[ \t]*(?:\[[ \t]*(?P<bracket>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*\]"
-    r"|(?P<colon>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL):"
-    r"|(?P<bare_end>END))"
-    r"[ \t]*(?P<inline>[^\r\n]*)$"
+    r"(?mi)^[ \t]*(?:"
+    r"\[[ \t]*(?P<bracket>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*\][ \t]*(?P<bracket_inline>[^\r\n]*)"
+    r"|(?P<colon>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL):[ \t]*(?P<colon_inline>[^\r\n]*)"
+    r"|(?P<bare>ANALYSIS_EN|KEEP_EN|IMPROVE_EN|PROMPT_EN_US|ANALYSIS_PL|EDIT_PLAN_PL|CONTRACT_REPORT_PL|END)[ \t]*"
+    r")$"
+)
+_CONTRACT_FINAL_VERDICT = re.compile(
+    r"(?i)^WYNIK_PROMPTU:[ \t]*(?:ZGODNY|NIEZGODNY|NIEPEWNY|BRAK_ZAŁOŻEŃ)[ \t]*[.]?$"
 )
 
 MODES = ("faithful", "improve", "creative")
@@ -263,29 +268,51 @@ def _parse_sections(text: str) -> dict[str, str] | None:
 
 
 def _parse_bilingual_sections(text: str) -> dict[str, str] | None:
-    """Accept new 7-field report and legacy 6-field report, both with final END.
+    """Accept full bilingual responses with END, plus one safe Gemma variant.
 
-    Never mistake the prompt echo or an unfinished final response for a result.
+    A missing END is tolerated ONLY for all seven nonempty sections in the exact
+    order and a contract report whose very last line is an explicit verdict.
+    Legacy six-section responses still require END. Reject trailing headings,
+    trailing text after END, partial reports, and unfinished thinking.
     """
     matches = list(_BILINGUAL_SECTION.finditer(text))
     candidates: list[tuple[int, dict[str, str]]] = []
-    for expected in (_BILINGUAL_LAYOUT_CONTRACT, _BILINGUAL_LAYOUT):
-        for i in range(len(matches) - len(expected) + 1):
-            group = matches[i:i + len(expected)]
-            labels = tuple((m.group("bracket") or m.group("colon") or m.group("bare_end")).upper() for m in group)
-            if labels != expected:
-                continue
-            if group[-1].group("inline").strip() or text[group[-1].end():].strip():
-                continue
-            fields: dict[str, str] = {}
-            for j, label in enumerate(labels[:-1]):
-                header = group[j]
-                inline = header.group("inline").strip()
-                remainder = text[header.end():group[j + 1].start()].strip()
-                fields[_BILINGUAL_KEYS[label]] = (inline + ("\n" if inline and remainder else "") + remainder).strip()
-            normalized = _normalize(fields, require_polish=True)
-            if normalized:
-                candidates.append((group[0].start(), normalized))
+    for layout in (_BILINGUAL_LAYOUT_CONTRACT, _BILINGUAL_LAYOUT):
+        for has_end in (True, False):
+            if not has_end and layout != _BILINGUAL_LAYOUT_CONTRACT:
+                continue  # six-section legacy format still requires explicit END
+            expected = layout if has_end else layout[:-1]
+            for i in range(len(matches) - len(expected) + 1):
+                group = matches[i:i + len(expected)]
+                labels = tuple((m.group("bracket") or m.group("colon") or m.group("bare")).upper()
+                               for m in group)
+                if labels != expected:
+                    continue
+                if has_end:
+                    end_marker = group[-1]
+                    end_inline = (end_marker.group("bracket_inline") or
+                                  end_marker.group("colon_inline") or "").strip()
+                    if end_inline or text[end_marker.end():].strip():
+                        continue
+                elif i + len(expected) != len(matches):
+                    # Without END, the contract section must be the last header.
+                    continue
+                fields: dict[str, str] = {}
+                section_count = len(labels) - (1 if has_end else 0)
+                for j, label in enumerate(labels[:section_count]):
+                    header = group[j]
+                    inline = (header.group("bracket_inline") or
+                              header.group("colon_inline") or "").strip()
+                    end = group[j + 1].start() if j + 1 < len(group) else len(text)
+                    remainder = text[header.end():end].strip()
+                    fields[_BILINGUAL_KEYS[label]] = (inline + ("\n" if inline and remainder else "") + remainder).strip()
+                if not has_end:
+                    report_lines = fields["contract_report_pl"].splitlines()
+                    if not report_lines or not _CONTRACT_FINAL_VERDICT.fullmatch(report_lines[-1].strip()):
+                        continue
+                normalized = _normalize(fields, require_polish=True)
+                if normalized:
+                    candidates.append((group[0].start(), normalized))
     return max(candidates, key=lambda x: x[0])[1] if candidates else None
 
 
@@ -311,7 +338,7 @@ def parse_result(raw: str, require_polish: bool = False) -> dict[str, str]:
     if bilingual:
         return bilingual
     if require_polish:
-        raise ValueError("VLM did not finish the six bilingual sections and [END] marker; no fabricated Polish report")
+        raise ValueError("VLM did not finish the required bilingual sections (or lacked END and a final contract verdict); no fabricated Polish report")
     result = _parse_sections(clean)
     if result:
         return result

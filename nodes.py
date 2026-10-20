@@ -195,5 +195,5 @@ NODE_CLASS_MAPPINGS = {
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Krea2TurboPromptBuilderV01": "Krea 2 Turbo | Prompt Builder v0.1.7 (legacy)",
-    "Krea2TurboPromptBuilderV018": "Krea 2 Turbo | Prompt Builder v0.1.8",
+    "Krea2TurboPromptBuilderV018": "Krea 2 Turbo | Prompt Builder v0.1.9",
 }

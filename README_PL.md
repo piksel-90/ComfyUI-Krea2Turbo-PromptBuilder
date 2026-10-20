@@ -1,3 +1,15 @@
+# V0.1.9 — Gemma: nagłówki bez nawiasów i brak końcowego END
+
+Poprawka parsera na podstawie rzeczywistego lokalnego `result.txt` (bez dodawania tego prywatnego pliku do repozytorium).
+
+- Obsługa samodzielnych nagłówków `ANALYSIS_EN`, `KEEP_EN`, `IMPROVE_EN`, `PROMPT_EN_US`, `ANALYSIS_PL`, `EDIT_PLAN_PL`, `CONTRACT_REPORT_PL` bez `[]` i `:`, ale tylko jako osobne fizyczne linie.
+- Brak `[END]` / `END` jest akceptowany **wyłącznie** przy wszystkich **siedmiu niepustych** sekcjach we właściwej kolejności i ostatniej linii `WYNIK_PROMPTU: ZGODNY.` / `NIEZGODNY.` / `NIEPEWNY.` / `BRAK_ZAŁOŻEŃ.` (opcjonalnie bez kropki).
+- Format sześciu sekcji bez raportu kontraktu **nadal wymaga END**. Niedokończona analiza, echo promptu, niezamknięte myślenie, tekst po `[END]` lub dodatkowy tekst po końcowym werdykcie bez END pozostają blokowane. `UZASADNIENIE` nie jest twardym warunkiem parsowania raportu.
+- **Bez zmian ustawień GPU, widgetów, liczby portów i typów nodów.** Nowy node zachowuje wewnętrzną nazwę `Krea2TurboPromptBuilderV018` (zgodność zapisanych workflow), lecz wyświetla wersję **v0.1.9**; V0.1.7 legacy pozostaje osobno.
+- Testy syntetyczne są w `tests/test_gemma_bare_headers.py`; oryginalne prywatne transkrypty diagnostyczne nie są commitowane. Model działa nadal lokalnie w jednym wywołaniu `llama-cli`; nic nie jest wysyłane do zewnętrznych usług.
+
+---
+
 # V0.1.8 — uproszczony node i bezpośrednia instrukcja VLM
 
 **Nowy node:** `Krea 2 Turbo | Prompt Builder v0.1.8` (typ `Krea2TurboPromptBuilderV018`).

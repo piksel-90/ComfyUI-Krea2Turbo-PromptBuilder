@@ -47,22 +47,28 @@ class GemmaTerminatorTests(unittest.TestCase):
 
     def test_end_only_inside_prompt_is_not_terminal(self):
         text = SYNTHETIC.replace('\nEND\n', '\nEND\nFurther unfinished response')
-        with self.assertRaisesRegex(ValueError,'six bilingual'):
+        with self.assertRaisesRegex(ValueError,'required bilingual sections'):
             parse_result(text, require_polish=True)
 
     def test_end_with_payload_is_not_terminal(self):
         text = SYNTHETIC.replace('\nEND\n', '\nEND some unrelated text\n')
-        with self.assertRaisesRegex(ValueError,'six bilingual'):
+        with self.assertRaisesRegex(ValueError,'required bilingual sections'):
             parse_result(text, require_polish=True)
 
-    def test_end_missing_is_not_terminal(self):
+    def test_end_missing_is_allowed_with_complete_report_and_final_verdict(self):
         text = SYNTHETIC.replace('\nEND\n','')
-        with self.assertRaisesRegex(ValueError,'six bilingual'):
+        parsed = parse_result(text, require_polish=True)
+        self.assertEqual(parsed['prompt_en_us'], 'A bright photograph of a red bicycle in a courtyard.')
+        self.assertIn('WYNIK_PROMPTU: ZGODNY.', parsed['contract_report_pl'])
+
+    def test_end_missing_and_final_verdict_missing_still_rejected(self):
+        text = SYNTHETIC.replace('\nEND\n','').replace('WYNIK_PROMPTU: ZGODNY.', 'uncompleted')
+        with self.assertRaisesRegex(ValueError,'required bilingual sections'):
             parse_result(text, require_polish=True)
 
     def test_missing_required_section_is_not_accepted(self):
         text = SYNTHETIC.replace('ANALYSIS_PL:', 'OTHER:')
-        with self.assertRaisesRegex(ValueError,'six bilingual'):
+        with self.assertRaisesRegex(ValueError,'required bilingual sections'):
             parse_result(text, require_polish=True)
 
     def test_echo_only_rejected(self):
